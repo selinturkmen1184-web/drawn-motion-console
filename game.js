@@ -145,6 +145,8 @@
     image.src = map.photo;
     return [map.id, image];
   }));
+  const asphaltTexture = new Image();
+  asphaltTexture.src = "./maps/asphalt-seamless-v1.jpg";
 
   function showScreen(name) {
     state.screen = name;
@@ -525,27 +527,71 @@
   }
 
   function drawRoad(width, height, race) {
-    const speedRatio = race.speed / race.vehicle.maxSpeed;
-    if (speedRatio < .035) return;
     const horizon = height * race.map.horizon;
+    const strips = Math.max(72, Math.min(112, Math.round((height - horizon) / 5)));
+    const textureReady = asphaltTexture.complete && asphaltTexture.naturalWidth;
+    const textureWidth = asphaltTexture.naturalWidth || 1;
+    const textureHeight = asphaltTexture.naturalHeight || 1;
+    const threeLanes = race.map.id === "city";
+    const lanePositions = threeLanes ? [-1 / 3, 1 / 3] : [0];
+
     ctx.save();
-    ctx.globalCompositeOperation = "screen";
-    ctx.lineCap = "round";
-    for (let i = 0; i < 34; i += 1) {
-      const phase = ((i / 34) + race.distance * .00175) % 1;
-      const t = Math.pow(phase, 1.65);
-      const y = horizon + t * (height - horizon);
-      const side = i % 2 ? 1 : -1;
-      const spread = width * (.09 + t * .48);
-      const x = roadCenter(t, width, race) + side * spread * (.42 + ((i * 17) % 41) / 100);
-      const length = (8 + t * 88) * speedRatio;
-      ctx.strokeStyle = `rgba(214,226,235,${(.025 + t * .14) * speedRatio})`;
-      ctx.lineWidth = .5 + t * 2.2;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + side * length * .22, y + length);
-      ctx.stroke();
+    for (let i = 0; i < strips; i += 1) {
+      const screen0 = i / strips;
+      const screen1 = (i + 1) / strips;
+      const t0 = Math.pow(screen0, .72);
+      const t1 = Math.pow(screen1, .72);
+      const y0 = horizon + screen0 * (height - horizon);
+      const y1 = horizon + screen1 * (height - horizon) + 1.2;
+      const half0 = width * (.027 + Math.pow(t0, 1.34) * .51);
+      const half1 = width * (.027 + Math.pow(t1, 1.34) * .51);
+      const center0 = roadCenter(t0, width, race);
+      const center1 = roadCenter(t1, width, race);
+      const edge0 = 1 + t0 * 10;
+      const edge1 = 1 + t1 * 10;
+      const worldDelta0 = (1 - t0) * 1280;
+      const worldDelta1 = (1 - t1) * 1280;
+      const worldZ = race.distance * 5.8 + (worldDelta0 + worldDelta1) * 2.7;
+      const sourceY = Math.floor(((worldZ % textureHeight) + textureHeight) % textureHeight);
+
+      ctx.globalAlpha = .94;
+      ctx.fillStyle = race.map.id === "city" ? "rgba(192,214,236,.7)" : "rgba(225,225,215,.72)";
+      quad(center0 - half0 - edge0, y0, center0 + half0 + edge0, y0, center1 + half1 + edge1, y1, center1 - half1 - edge1, y1);
+
+      if (textureReady) {
+        ctx.drawImage(asphaltTexture, 0, sourceY, textureWidth, 1, center0 - half0, y0, half0 * 2, Math.max(1.5, y1 - y0));
+      } else {
+        ctx.fillStyle = race.map.road;
+        quad(center0 - half0, y0, center0 + half0, y0, center1 + half1, y1, center1 - half1, y1);
+      }
+
+      const dashPhase = ((worldZ / 5.8) % 72 + 72) % 72;
+      if (dashPhase < 30) {
+        ctx.globalAlpha = .72 + t0 * .24;
+        ctx.fillStyle = threeLanes ? "#eef5ff" : "#efbd38";
+        lanePositions.forEach((lane) => {
+          const mark0 = .65 + t0 * 2.9;
+          const mark1 = .65 + t1 * 2.9;
+          const lane0 = center0 + lane * half0 * .98;
+          const lane1 = center1 + lane * half1 * .98;
+          quad(lane0 - mark0, y0, lane0 + mark0, y0, lane1 + mark1, y1, lane1 - mark1, y1);
+        });
+      }
     }
+
+    const roadShade = ctx.createLinearGradient(0, horizon, 0, height);
+    roadShade.addColorStop(0, "rgba(0,0,0,.22)");
+    roadShade.addColorStop(.4, "rgba(0,0,0,.05)");
+    roadShade.addColorStop(1, "rgba(0,0,0,.18)");
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = roadShade;
+    ctx.beginPath();
+    ctx.moveTo(width * .473, horizon);
+    ctx.lineTo(width * .527, horizon);
+    ctx.lineTo(width * 1.03, height);
+    ctx.lineTo(-width * .03, height);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 
