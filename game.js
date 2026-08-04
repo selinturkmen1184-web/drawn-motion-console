@@ -137,8 +137,8 @@
     silverado: new Image(),
     clk55: new Image(),
   };
-  vehicleSprites.silverado.src = "./sprites/silverado-game-v2.png?v=exact-cars-1";
-  vehicleSprites.clk55.src = "./sprites/clk55-game-v2.png?v=exact-cars-1";
+  vehicleSprites.silverado.src = "./sprites/silverado-chase-v3.png?v=car-visual-4";
+  vehicleSprites.clk55.src = "./sprites/clk55-chase-v3.png?v=car-visual-4";
 
   const mapPhotos = Object.fromEntries(Object.values(maps).map((map) => {
     const image = new Image();
@@ -657,18 +657,18 @@
     const sprite = vehicleSprites[race.vehicle.id];
     const isTruck = race.vehicle.id === "silverado";
     const drawWidth = isTruck
-      ? Math.max(235, Math.min(455, width * .355))
-      : Math.max(190, Math.min(340, width * .275));
+      ? Math.min(width * .78, Math.max(280, Math.min(560, width * .4)))
+      : Math.min(width * .72, Math.max(245, Math.min(470, width * .34)));
     const spriteRatio = sprite.naturalWidth ? sprite.naturalHeight / sprite.naturalWidth : (isTruck ? .56 : .86);
     const drawHeight = drawWidth * spriteRatio;
 
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(-race.steer * .018);
-    ctx.fillStyle = "rgba(0,0,0,.52)";
-    ctx.filter = "blur(8px)";
+    ctx.fillStyle = "rgba(0,0,0,.58)";
+    ctx.filter = "blur(10px)";
     ctx.beginPath();
-    ctx.ellipse(0, -drawHeight * .05, drawWidth * .37, drawHeight * .105, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -drawHeight * .045, drawWidth * .4, drawHeight * .09, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.filter = "none";
 
