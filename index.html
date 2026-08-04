@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#08090b" />
+    <meta name="description" content="TheDrawnMotion Collector's Run — üç haritalı, gamepad destekli sürüş oyunu." />
+    <meta property="og:title" content="TheDrawnMotion — Collector's Run" />
+    <meta property="og:description" content="İki özel araç, üç rota, tek koleksiyon." />
+    <meta property="og:image" content="./og.png" />
+    <title>TheDrawnMotion — Collector's Run</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <div class="app" id="app">
+      <header class="console-bar">
+        <button class="wordmark" type="button" data-screen-target="home" aria-label="Ana menüye dön">
+          <span class="logo-disc">TDM</span>
+          <span><b>TheDrawnMotion</b><small>COLLECTOR'S RUN · PROTOTYPE 02</small></span>
+        </button>
+        <div class="console-status">
+          <span id="gamepadStatus"><i></i> GAMEPAD BEKLENİYOR</span>
+          <button id="soundButton" class="round-button" type="button" aria-label="Sesi aç veya kapat">SOUND ON</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="screen active" id="homeScreen" aria-labelledby="heroTitle">
+          <div class="hero-copy">
+            <p class="kicker">45 CARS · 03 MAPS · 01 COLLECTION</p>
+            <h1 id="heroTitle"><span>COLLECTOR'S</span><strong>RUN</strong></h1>
+            <p class="hero-text">Özel otomobil sanatını garajdan çıkar. Haritaları tamamla, kayıp çizim sayfalarını topla ve koleksiyonun hikâyesini yola taşı.</p>
+            <div class="hero-actions">
+              <button class="primary-button" id="startButton" type="button"><span>OYUNA BAŞLA</span><i>→</i></button>
+              <button class="ghost-button" id="howButton" type="button">NASIL OYNANIR?</button>
+            </div>
+            <div class="control-legend">
+              <span><kbd>W</kbd><kbd>↑</kbd> GAZ</span>
+              <span><kbd>A</kbd><kbd>D</kbd> YÖN</span>
+              <span><kbd>S</kbd><kbd>↓</kbd> FREN</span>
+              <span><kbd>ESC</kbd> DURAKLAT</span>
+            </div>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="hero-card hero-card-back"><img src="./cars/clk55-city.jpg" alt="" /></div>
+            <div class="hero-card hero-card-front"><img src="./cars/silverado-front.jpg" alt="" /></div>
+            <div class="edition-seal"><small>LIMITED</small><b>02</b><small>EDITION</small></div>
+            <div class="route-line"></div>
+          </div>
+          <div class="home-footer"><span>WEB CONSOLE EDITION</span><span>KEYBOARD · TOUCH · GAMEPAD</span></div>
+        </section>
+
+        <section class="screen selection-screen" id="vehicleScreen" aria-labelledby="vehicleTitle">
+          <div class="screen-heading">
+            <div><p class="kicker">STEP 01 / 02</p><h2 id="vehicleTitle">ARACINI SEÇ</h2></div>
+            <p>Her otomobilin yol tutuşu ve hızı farklıdır. Parkurun karakterine göre seçimini yap.</p>
+          </div>
+          <div class="vehicle-select-grid">
+            <article class="vehicle-select-card selected" data-vehicle="silverado" tabindex="0">
+              <div class="vehicle-photo"><img src="./cars/silverado-rear.jpg" alt="Beyaz Overland Silverado" /><span>01</span></div>
+              <div class="vehicle-card-copy">
+                <p>ADVENTURE CLASS</p><h3>OVERLAND<br />SILVERADO</h3>
+                <div class="stat"><span>HIZ</span><i><b style="width: 72%"></b></i><em>170</em></div>
+                <div class="stat"><span>İVME</span><i><b style="width: 68%"></b></i><em>68</em></div>
+                <div class="stat"><span>KONTROL</span><i><b style="width: 92%"></b></i><em>92</em></div>
+              </div>
+              <div class="selected-mark">SEÇİLDİ</div>
+            </article>
+            <article class="vehicle-select-card" data-vehicle="clk55" tabindex="0">
+              <div class="vehicle-photo"><img src="./cars/clk55-city.jpg" alt="Bronz CLK 55 AMG Cabriolet" /><span>02</span></div>
+              <div class="vehicle-card-copy">
+                <p>GRAND TOURER CLASS</p><h3>CLK 55 AMG<br />CABRIOLET</h3>
+                <div class="stat"><span>HIZ</span><i><b style="width: 96%"></b></i><em>240</em></div>
+                <div class="stat"><span>İVME</span><i><b style="width: 88%"></b></i><em>88</em></div>
+                <div class="stat"><span>KONTROL</span><i><b style="width: 76%"></b></i><em>76</em></div>
+              </div>
+              <div class="selected-mark">SEÇ</div>
+            </article>
+          </div>
+          <div class="selection-actions"><button class="back-button" type="button" data-screen-target="home">← GERİ</button><button class="primary-button compact" id="vehicleContinue" type="button"><span>HARİTAYI SEÇ</span><i>→</i></button></div>
+        </section>
+
+        <section class="screen selection-screen" id="mapScreen" aria-labelledby="mapTitle">
+          <div class="screen-heading">
+            <div><p class="kicker">STEP 02 / 02</p><h2 id="mapTitle">ROTANI SEÇ</h2></div>
+            <p>Üç farklı atmosfer, üç farklı yol karakteri. Her rotada dört kayıp çizim sayfası bulunur.</p>
+          </div>
+          <div class="map-grid">
+            <article class="map-card selected" data-map="city" tabindex="0">
+              <div class="map-visual city-map"><div class="city-skyline"></div><div class="map-road"></div><span>01</span></div>
+              <div class="map-copy"><p>NIGHT / ASPHALT</p><h3>NEON CITY<br />CIRCUIT</h3><div><span>2.4 KM</span><span>MEDIUM</span><span class="best-time" data-best="city">BEST —:—</span></div></div>
+              <i class="map-check">✓</i>
+            </article>
+            <article class="map-card" data-map="canyon" tabindex="0">
+              <div class="map-visual canyon-map"><div class="canyon-sun"></div><div class="map-road"></div><span>02</span></div>
+              <div class="map-copy"><p>SUNSET / DUST</p><h3>RED ROCK<br />EXPEDITION</h3><div><span>2.8 KM</span><span>HARD</span><span class="best-time" data-best="canyon">BEST —:—</span></div></div>
+              <i class="map-check">✓</i>
+            </article>
+            <article class="map-card" data-map="forest" tabindex="0">
+              <div class="map-visual forest-map"><div class="forest-pines"></div><div class="map-road"></div><span>03</span></div>
+              <div class="map-copy"><p>DAWN / MOUNTAIN</p><h3>ALPINE INK<br />RUN</h3><div><span>2.6 KM</span><span>EXPERT</span><span class="best-time" data-best="forest">BEST —:—</span></div></div>
+              <i class="map-check">✓</i>
+            </article>
+          </div>
+          <div class="selection-actions"><button class="back-button" type="button" data-screen-target="vehicle">← GERİ</button><button class="primary-button compact" id="raceButton" type="button"><span>YARIŞI BAŞLAT</span><i>↗</i></button></div>
+        </section>
+
+        <section class="screen game-screen" id="gameScreen" aria-label="Yarış ekranı">
+          <canvas id="gameCanvas" aria-label="Sürüş oyunu alanı"></canvas>
+          <div class="game-hud">
+            <div class="hud-left">
+              <div class="hud-vehicle"><img id="hudVehicleImage" src="./cars/silverado-front.jpg" alt="Seçili araç" /><span><small id="hudClass">ADVENTURE CLASS</small><b id="hudVehicle">OVERLAND SILVERADO</b></span></div>
+              <div class="mission"><small>MISSION</small><span>KAYIP ÇİZİMLERİ TOPLA</span><b><i id="pagePips"></i><em id="pageCounter">0 / 4</em></b></div>
+            </div>
+            <div class="hud-center"><small id="hudMap">NEON CITY CIRCUIT</small><div class="track-progress"><i id="trackProgress"></i><span id="distanceLabel">0.0 / 2.4 KM</span></div></div>
+            <div class="hud-right"><button id="pauseButton" type="button">Ⅱ</button><div><small>TIME</small><b id="timeLabel">00:00.0</b></div></div>
+          </div>
+          <div class="speed-cluster"><b id="speedLabel">000</b><span>KM/H</span><div class="speed-bar"><i id="speedBar"></i></div><small id="gearLabel">N</small></div>
+          <div class="countdown" id="countdown">3</div>
+          <div class="toast" id="collectToast"><span>+1</span> KAYIP ÇİZİM BULUNDU</div>
+          <div class="touch-controls" aria-label="Dokunmatik sürüş kontrolleri">
+            <div><button data-control="left" aria-label="Sola dön">←</button><button data-control="right" aria-label="Sağa dön">→</button></div>
+            <div><button data-control="brake" aria-label="Fren">FREN</button><button class="gas" data-control="gas" aria-label="Gaz">GAZ</button></div>
+          </div>
+          <div class="pause-panel" id="pausePanel"><p class="kicker">GAME PAUSED</p><h2>YOLCULUK<br />BEKLİYOR.</h2><button class="primary-button compact" id="resumeButton" type="button"><span>DEVAM ET</span><i>→</i></button><button class="ghost-button light" id="quitButton" type="button">HARİTA SEÇİMİNE DÖN</button></div>
+        </section>
+
+        <section class="screen result-screen" id="resultScreen" aria-labelledby="resultTitle">
+          <div class="result-art"><img id="resultImage" src="./cars/silverado-front.jpg" alt="Tamamlanan aracın koleksiyon görseli" /><div class="result-grade" id="resultGrade">A</div></div>
+          <div class="result-copy"><p class="kicker">ROUTE COMPLETE</p><h2 id="resultTitle">KOLEKSİYONA<br />YENİ BİR HİKÂYE.</h2><div class="result-stats"><div><small>SÜRE</small><b id="resultTime">00:00.0</b></div><div><small>ÇİZİM</small><b id="resultPages">4 / 4</b></div><div><small>EN YÜKSEK HIZ</small><b id="resultSpeed">210 KM/H</b></div></div><p id="resultMessage">Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi.</p><div class="result-actions"><button class="primary-button" id="replayButton" type="button"><span>TEKRAR SÜR</span><i>↻</i></button><button class="ghost-button light" id="newRouteButton" type="button">YENİ ROTA</button></div></div>
+        </section>
+      </main>
+
+      <div class="modal" id="howModal" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+          <button class="modal-close" id="howClose" type="button" aria-label="Kapat">×</button>
+          <p class="kicker">DRIVER MANUAL</p><h2 id="howTitle">YOLA ÇIKMADAN ÖNCE</h2>
+          <ol><li><b>01</b><span>Aracını ve üç özgün haritadan birini seç.</span></li><li><b>02</b><span>Gaz ver, virajları takip et ve yoldan çıkmamaya çalış.</span></li><li><b>03</b><span>Parkurdaki dört çizim sayfasının üzerinden geçerek hepsini topla.</span></li><li><b>04</b><span>Klavye, dokunmatik ekran veya bağlı gamepad ile oynayabilirsin.</span></li></ol>
+          <button class="primary-button full" id="howStart" type="button"><span>SÜRÜCÜYÜ SEÇ</span><i>→</i></button>
+        </div>
+      </div>
+    </div>
+    <script src="./game.js"></script>
+  </body>
+</html>
