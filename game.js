@@ -32,6 +32,8 @@
     city: {
       id: "city",
       name: "NEON CITY CIRCUIT",
+      photo: "./maps/neon-city-photo-v1.jpg",
+      horizon: 0.55,
       distance: 2400,
       skyTop: "#071326",
       skyBottom: "#392046",
@@ -48,6 +50,8 @@
     canyon: {
       id: "canyon",
       name: "RED ROCK EXPEDITION",
+      photo: "./maps/red-rock-photo-v1.jpg",
+      horizon: 0.52,
       distance: 2800,
       skyTop: "#d5482e",
       skyBottom: "#f5a24b",
@@ -64,6 +68,8 @@
     forest: {
       id: "forest",
       name: "ALPINE INK RUN",
+      photo: "./maps/alpine-photo-v1.jpg",
+      horizon: 0.6,
       distance: 2600,
       skyTop: "#9fb9ae",
       skyBottom: "#e2c995",
@@ -133,6 +139,12 @@
   };
   vehicleSprites.silverado.src = "./sprites/silverado-game-v2.png?v=exact-cars-1";
   vehicleSprites.clk55.src = "./sprites/clk55-game-v2.png?v=exact-cars-1";
+
+  const mapPhotos = Object.fromEntries(Object.values(maps).map((map) => {
+    const image = new Image();
+    image.src = map.photo;
+    return [map.id, image];
+  }));
 
   function showScreen(name) {
     state.screen = name;
@@ -313,6 +325,7 @@
       distance: 0,
       elapsed: 0,
       playerX: 0,
+      steer: 0,
       maxSpeed: 0,
       pages: new Set(),
       lastTime: performance.now(),
@@ -387,6 +400,7 @@
     if (input.brake > 0) race.speed -= v.brake * input.brake * dt;
 
     const steerStrength = v.handling * (0.62 + race.speed / v.maxSpeed);
+    race.steer = input.steer;
     race.playerX += input.steer * steerStrength * dt;
     race.playerX *= Math.pow(0.991, dt * 60);
     if (Math.abs(race.playerX) > 0.88) race.speed -= 54 * dt;
@@ -468,14 +482,14 @@
 
   function roadCenter(t, width, race) {
     const wave = Math.sin(race.distance * 0.0019 + (1 - t) * 3.25) + Math.sin(race.distance * 0.00073 + (1 - t) * 1.4) * 0.4;
-    return width / 2 + wave * race.map.curve * width * (1 - t) * 0.27;
+    return width / 2 + wave * race.map.curve * width * (1 - t) * 0.07;
   }
 
   function projectRoadObject(distance, lane, width, height, race) {
     const delta = distance - race.distance;
     if (delta < -20 || delta > 930) return null;
     const t = 1 - Math.max(0, delta) / 930;
-    const horizon = height * 0.31;
+    const horizon = height * race.map.horizon;
     const y = horizon + Math.pow(t, 1.75) * (height - horizon);
     const half = width * (0.065 + Math.pow(t, 1.35) * 0.44);
     const center = roadCenter(t, width, race);
@@ -483,82 +497,56 @@
   }
 
   function drawSky(width, height, map, race, time) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, height * 0.72);
-    gradient.addColorStop(0, map.skyTop);
-    gradient.addColorStop(1, map.skyBottom);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-
-    if (map.id === "city") {
-      ctx.fillStyle = "rgba(236,240,255,.85)";
-      ctx.beginPath(); ctx.arc(width * 0.79, height * 0.14, 24, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#0e1320";
-      for (let i = 0; i < 18; i += 1) {
-        const bw = width / 18 + 2;
-        const bh = 28 + ((i * 47) % 105);
-        const x = i * width / 18;
-        const y = height * 0.31 - bh;
-        ctx.fillRect(x, y, bw, bh);
-        ctx.fillStyle = i % 3 === 0 ? "rgba(255,76,40,.55)" : "rgba(130,169,255,.28)";
-        for (let wy = y + 9; wy < y + bh - 5; wy += 13) for (let wx = x + 7; wx < x + bw - 5; wx += 11) ctx.fillRect(wx, wy, 2, 3);
-        ctx.fillStyle = "#0e1320";
-      }
-    } else if (map.id === "canyon") {
-      ctx.fillStyle = "rgba(255,211,95,.83)";
-      ctx.beginPath(); ctx.arc(width * 0.76, height * 0.16, 38, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#6c2c20";
-      ctx.beginPath(); ctx.moveTo(0, height * 0.33); ctx.lineTo(width * .14, height * .18); ctx.lineTo(width * .27, height * .32); ctx.lineTo(width * .4, height * .15); ctx.lineTo(width * .55, height * .33); ctx.lineTo(width * .72, height * .21); ctx.lineTo(width, height * .35); ctx.lineTo(width, height * .48); ctx.lineTo(0, height * .48); ctx.closePath(); ctx.fill();
+    const photo = mapPhotos[map.id];
+    if (photo.complete && photo.naturalWidth) {
+      const speedRatio = race.speed / race.vehicle.maxSpeed;
+      const zoom = 1.035 + speedRatio * .018;
+      const scale = Math.max(width / photo.naturalWidth, height / photo.naturalHeight) * zoom;
+      const drawWidth = photo.naturalWidth * scale;
+      const drawHeight = photo.naturalHeight * scale;
+      const curvePan = Math.sin(race.distance * .00055) * width * .015;
+      const playerPan = race.playerX * width * .018;
+      ctx.drawImage(photo, (width - drawWidth) / 2 - curvePan - playerPan, (height - drawHeight) / 2, drawWidth, drawHeight);
     } else {
-      ctx.fillStyle = "rgba(251,226,163,.75)";
-      ctx.beginPath(); ctx.arc(width * 0.73, height * 0.17, 31, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#365746";
-      for (let i = 0; i < 28; i += 1) {
-        const x = i * width / 27;
-        const base = height * .38;
-        const pine = 30 + (i * 31 % 70);
-        ctx.beginPath(); ctx.moveTo(x, base - pine); ctx.lineTo(x - pine * .24, base); ctx.lineTo(x + pine * .24, base); ctx.closePath(); ctx.fill();
-      }
+      const fallback = ctx.createLinearGradient(0, 0, 0, height);
+      fallback.addColorStop(0, map.skyTop);
+      fallback.addColorStop(1, map.ground);
+      ctx.fillStyle = fallback;
+      ctx.fillRect(0, 0, width, height);
     }
 
-    ctx.fillStyle = map.ground;
-    ctx.fillRect(0, height * 0.31, width, height * 0.69);
-    const pulse = 0.4 + Math.sin(time * 2) * 0.05;
-    ctx.fillStyle = `rgba(255,255,255,${pulse * .04})`;
-    ctx.fillRect(0, height * .3, width, 2);
+    const cinematic = ctx.createLinearGradient(0, 0, 0, height);
+    cinematic.addColorStop(0, "rgba(3,6,10,.42)");
+    cinematic.addColorStop(.28, "rgba(3,6,10,0)");
+    cinematic.addColorStop(.74, "rgba(3,6,10,0)");
+    cinematic.addColorStop(1, "rgba(3,6,10,.34)");
+    ctx.fillStyle = cinematic;
+    ctx.fillRect(0, 0, width, height);
   }
 
   function drawRoad(width, height, race) {
-    const horizon = height * 0.31;
-    const segments = 62;
-    const phase = Math.floor(race.distance / 24);
-    for (let i = 0; i < segments; i += 1) {
-      const t0 = i / segments;
-      const t1 = (i + 1) / segments;
-      const y0 = horizon + Math.pow(t0, 1.72) * (height - horizon);
-      const y1 = horizon + Math.pow(t1, 1.72) * (height - horizon);
-      const half0 = width * (.065 + Math.pow(t0, 1.25) * .44);
-      const half1 = width * (.065 + Math.pow(t1, 1.25) * .44);
-      const center0 = roadCenter(t0, width, race);
-      const center1 = roadCenter(t1, width, race);
-      const shoulder0 = 4 + t0 * 17;
-      const shoulder1 = 4 + t1 * 17;
-
-      ctx.fillStyle = race.map.shoulder;
-      quad(center0 - half0 - shoulder0, y0, center0 + half0 + shoulder0, y0, center1 + half1 + shoulder1, y1, center1 - half1 - shoulder1, y1);
-      ctx.fillStyle = (i + phase) % 2 ? race.map.road : race.map.roadAlt;
-      quad(center0 - half0, y0, center0 + half0, y0, center1 + half1, y1, center1 - half1, y1);
-
-      if ((i + phase) % 7 < 3 && i > 4) {
-        ctx.fillStyle = race.map.lane;
-        [-1 / 3, 1 / 3].forEach((lane) => {
-          const mark0 = 1 + t0 * 2.5;
-          const mark1 = 1 + t1 * 2.5;
-          const lx0 = center0 + lane * half0;
-          const lx1 = center1 + lane * half1;
-          quad(lx0 - mark0, y0, lx0 + mark0, y0, lx1 + mark1, y1, lx1 - mark1, y1);
-        });
-      }
+    const speedRatio = race.speed / race.vehicle.maxSpeed;
+    if (speedRatio < .035) return;
+    const horizon = height * race.map.horizon;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.lineCap = "round";
+    for (let i = 0; i < 34; i += 1) {
+      const phase = ((i / 34) + race.distance * .00175) % 1;
+      const t = Math.pow(phase, 1.65);
+      const y = horizon + t * (height - horizon);
+      const side = i % 2 ? 1 : -1;
+      const spread = width * (.09 + t * .48);
+      const x = roadCenter(t, width, race) + side * spread * (.42 + ((i * 17) % 41) / 100);
+      const length = (8 + t * 88) * speedRatio;
+      ctx.strokeStyle = `rgba(214,226,235,${(.025 + t * .14) * speedRatio})`;
+      ctx.lineWidth = .5 + t * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + side * length * .22, y + length);
+      ctx.stroke();
     }
+    ctx.restore();
   }
 
   function quad(x1, y1, x2, y2, x3, y3, x4, y4) {
@@ -566,26 +554,15 @@
   }
 
   function drawScenery(width, height, race) {
-    const objects = [];
-    for (let i = 0; i < 18; i += 1) {
-      const spacing = 170;
-      const loop = 2100;
-      const distance = ((i * spacing - race.distance) % loop + loop) % loop;
-      if (distance > 920) continue;
-      const t = 1 - distance / 920;
-      objects.push({ t, side: i % 2 ? 1 : -1, seed: i });
-    }
-    objects.sort((a, b) => a.t - b.t).forEach((object) => {
-      const t = object.t;
-      const y = height * .31 + Math.pow(t, 1.75) * (height - height * .31);
-      const half = width * (.065 + Math.pow(t, 1.35) * .44);
-      const center = roadCenter(t, width, race);
-      const size = 8 + Math.pow(t, 1.65) * 72;
-      const x = center + object.side * (half + size * .8 + 8);
-      if (race.map.id === "city") drawBuilding(x, y, size, object.seed);
-      else if (race.map.id === "canyon") drawRock(x, y, size, object.seed);
-      else drawPine(x, y, size, object.seed);
-    });
+    const speedRatio = race.speed / race.vehicle.maxSpeed;
+    if (speedRatio < .42) return;
+    const edge = ctx.createLinearGradient(0, 0, width, 0);
+    edge.addColorStop(0, `rgba(240,247,255,${speedRatio * .055})`);
+    edge.addColorStop(.16, "rgba(240,247,255,0)");
+    edge.addColorStop(.84, "rgba(240,247,255,0)");
+    edge.addColorStop(1, `rgba(240,247,255,${speedRatio * .055})`);
+    ctx.fillStyle = edge;
+    ctx.fillRect(0, height * .35, width, height * .65);
   }
 
   function drawBuilding(x, y, size, seed) {
@@ -629,7 +606,8 @@
   function drawPlayer(width, height, race) {
     const nearHalf = width * .48;
     const x = width / 2 + race.playerX * nearHalf * .72;
-    const y = height * .965;
+    const speedRatio = race.speed / race.vehicle.maxSpeed;
+    const y = height * .965 + Math.sin(race.distance * .12) * speedRatio * 2.2;
     const sprite = vehicleSprites[race.vehicle.id];
     const isTruck = race.vehicle.id === "silverado";
     const drawWidth = isTruck
@@ -640,6 +618,7 @@
 
     ctx.save();
     ctx.translate(x, y);
+    ctx.rotate(-race.steer * .018);
     ctx.fillStyle = "rgba(0,0,0,.52)";
     ctx.filter = "blur(8px)";
     ctx.beginPath();

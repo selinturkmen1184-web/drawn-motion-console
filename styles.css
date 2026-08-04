@@ -103,13 +103,15 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .map-card:hover, .map-card.selected { border-color: var(--signal); transform: translateY(-2px); }
 .map-visual { position: relative; height: 60%; min-height: 225px; overflow: hidden; }
 .map-visual > span { position: absolute; top: 13px; left: 15px; z-index: 5; font: 600 17px/1 var(--mono); color: white; }
-.city-map { background: linear-gradient(#091429 0 50%, #321738 50%); }
+.city-map { background: center / cover url('./maps/neon-city-photo-v1.jpg'); }
 .city-skyline { position: absolute; left: 0; right: 0; bottom: 25%; height: 45%; background: repeating-linear-gradient(90deg, #141925 0 8%, transparent 8% 12%), linear-gradient(transparent, #10131a); clip-path: polygon(0 100%,0 45%,8% 45%,8% 20%,17% 20%,17% 62%,27% 62%,27% 7%,39% 7%,39% 48%,48% 48%,48% 28%,60% 28%,60% 70%,70% 70%,70% 18%,82% 18%,82% 55%,91% 55%,91% 31%,100% 31%,100% 100%); }
-.canyon-map { background: linear-gradient(#e65231, #4b201a 60%, #191515); }
+.canyon-map { background: center / cover url('./maps/red-rock-photo-v1.jpg'); }
 .canyon-map::before, .canyon-map::after { content: ''; position: absolute; bottom: 25%; width: 44%; height: 47%; background: #51241b; clip-path: polygon(0 100%, 16% 22%, 28% 36%, 44% 8%, 62% 48%, 74% 31%, 100% 100%); }
 .canyon-map::before { left: -5%; }.canyon-map::after { right: -5%; transform: scaleX(-1); }
 .canyon-sun { position: absolute; right: 18%; top: 18%; width: 62px; height: 62px; border-radius: 50%; background: #ffb044; box-shadow: 0 0 45px rgba(255,176,68,.35); }
-.forest-map { background: linear-gradient(#adc6b4, #304d3e 57%, #101912); }
+.forest-map { background: center / cover url('./maps/alpine-photo-v1.jpg'); }
+.city-map > div, .canyon-map > div, .forest-map > div,
+.canyon-map::before, .canyon-map::after { display: none; }
 .forest-pines { position: absolute; left: 0; right: 0; bottom: 24%; height: 60%; background: repeating-linear-gradient(72deg, transparent 0 8%, #173426 8% 11%, transparent 11% 16%); clip-path: polygon(0 100%,4% 35%,9% 100%,16% 17%,23% 100%,31% 45%,38% 100%,46% 5%,54% 100%,62% 32%,69% 100%,78% 13%,86% 100%,94% 28%,100% 100%); }
 .map-road { position: absolute; bottom: -4%; left: 18%; width: 64%; height: 58%; background: #25272a; clip-path: polygon(43% 0, 57% 0, 94% 100%, 6% 100%); }
 .map-road::after { content: ''; position: absolute; top: 8%; bottom: 0; left: 49%; width: 2%; background: repeating-linear-gradient(transparent 0 13%, rgba(255,255,255,.7) 13% 22%); }
