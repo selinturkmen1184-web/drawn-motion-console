@@ -4,7 +4,7 @@ Tarayıcıda çalışan konsol tarzı sürüş oyunu prototipi.
 
 ## İçerik
 
-- Overland Silverado ve CLK 55 AMG Cabriolet
+- Gerçek araç fotoğraflarından hazırlanan yüksek ayrıntılı Overland Silverado ve CLK 55 AMG Cabriolet modelleri
 - Neon City Circuit, Red Rock Expedition ve Alpine Ink Run haritaları
 - Kayıp çizim sayfalarını toplama görevi
 - Klavye, dokunmatik ekran ve Gamepad API desteği

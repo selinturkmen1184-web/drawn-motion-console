@@ -125,6 +125,13 @@
   let engineOscillator = null;
   let engineGain = null;
 
+  const vehicleSprites = {
+    silverado: new Image(),
+    clk55: new Image(),
+  };
+  vehicleSprites.silverado.src = "./sprites/silverado-game-v2.png";
+  vehicleSprites.clk55.src = "./sprites/clk55-game-v2.png";
+
   function showScreen(name) {
     state.screen = name;
     Object.entries(screens).forEach(([key, element]) => element.classList.toggle("active", key === name));
@@ -620,39 +627,34 @@
   function drawPlayer(width, height, race) {
     const nearHalf = width * .48;
     const x = width / 2 + race.playerX * nearHalf * .72;
-    const y = height * .82;
-    const scale = Math.max(.68, Math.min(1.15, width / 1100));
-    ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
-    ctx.shadowColor = "rgba(0,0,0,.55)"; ctx.shadowBlur = 22; ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.beginPath(); ctx.ellipse(0, 33, 56, 16, 0, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
-    if (race.vehicle.id === "silverado") drawSilverado(); else drawClk();
+    const y = height * .91;
+    const sprite = vehicleSprites[race.vehicle.id];
+    const isTruck = race.vehicle.id === "silverado";
+    const drawWidth = isTruck
+      ? Math.max(182, Math.min(335, width * .265))
+      : Math.max(145, Math.min(235, width * .19));
+    const spriteRatio = sprite.naturalWidth ? sprite.naturalHeight / sprite.naturalWidth : (isTruck ? .56 : .86);
+    const drawHeight = drawWidth * spriteRatio;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = "rgba(0,0,0,.52)";
+    ctx.filter = "blur(8px)";
+    ctx.beginPath();
+    ctx.ellipse(0, -drawHeight * .05, drawWidth * .37, drawHeight * .105, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.filter = "none";
+
+    if (sprite.complete && sprite.naturalWidth) {
+      ctx.shadowColor = "rgba(0,0,0,.46)";
+      ctx.shadowBlur = 17;
+      ctx.shadowOffsetY = 8;
+      ctx.drawImage(sprite, -drawWidth / 2, -drawHeight, drawWidth, drawHeight);
+    } else {
+      ctx.fillStyle = isTruck ? "#eeeae0" : "#a66c50";
+      ctx.fillRect(-drawWidth * .33, -drawHeight * .74, drawWidth * .66, drawHeight * .66);
+    }
     ctx.restore();
-  }
-
-  function drawSilverado() {
-    ctx.fillStyle = "#0c0d0f"; ctx.fillRect(-58, -8, 13, 55); ctx.fillRect(45, -8, 13, 55);
-    ctx.fillStyle = "#eeece5"; roundRect(-51, -48, 102, 92, 15); ctx.fill();
-    ctx.fillStyle = "#17191d"; roundRect(-43, -40, 86, 34, 9); ctx.fill();
-    ctx.fillStyle = "#23262b"; ctx.fillRect(-50, 5, 100, 20);
-    ctx.strokeStyle = "#6f7479"; ctx.lineWidth = 3; ctx.strokeRect(-41, -58, 82, 14); ctx.beginPath(); ctx.moveTo(-31,-58);ctx.lineTo(-31,-44);ctx.moveTo(31,-58);ctx.lineTo(31,-44);ctx.stroke();
-    ctx.fillStyle = "#ff3f27"; roundRect(-43, 28, 24, 9, 3); ctx.fill(); roundRect(19, 28, 24, 9, 3); ctx.fill();
-    ctx.strokeStyle = "#26282b"; ctx.lineWidth = 1.5; for (let i = -2; i <= 2; i += 1) { ctx.beginPath(); ctx.moveTo(-30, i * 10 + 2); ctx.bezierCurveTo(-12, i * 10 - 5, 10, i * 10 + 8, 31, i * 10); ctx.stroke(); }
-    ctx.fillStyle = "#181a1c"; ctx.fillRect(-24, 40, 48, 5);
-  }
-
-  function drawClk() {
-    ctx.fillStyle = "#0b0c0d"; ctx.fillRect(-49, -2, 11, 48); ctx.fillRect(38, -2, 11, 48);
-    ctx.fillStyle = "#a66c50"; roundRect(-45, -45, 90, 84, 21); ctx.fill();
-    ctx.fillStyle = "#17191d"; roundRect(-37, -34, 74, 27, 12); ctx.fill();
-    ctx.fillStyle = "#d2c1a3"; ctx.beginPath(); ctx.arc(-18, -18, 8, 0, Math.PI * 2); ctx.arc(18, -18, 8, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "#e2d5bd"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-37,-34);ctx.lineTo(37,-34);ctx.stroke();
-    ctx.fillStyle = "#c42b2c"; roundRect(-37, 20, 25, 11, 4); ctx.fill(); roundRect(12, 20, 25, 11, 4); ctx.fill();
-    ctx.fillStyle = "#d7c5ab"; ctx.fillRect(-6, 18, 12, 9);
-    ctx.fillStyle = "#17191d"; ctx.fillRect(-25, 36, 50, 5);
-  }
-
-  function roundRect(x, y, width, height, radius) {
-    const r = Math.min(radius, width / 2, height / 2);
-    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + width, y, x + width, y + height, r); ctx.arcTo(x + width, y + height, x, y + height, r); ctx.arcTo(x, y + height, x, y, r); ctx.arcTo(x, y, x + width, y, r); ctx.closePath();
   }
 
   function drawGame(time) {
