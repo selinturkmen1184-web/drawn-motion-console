@@ -89,6 +89,8 @@
   };
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   const countdown = document.getElementById("countdown");
   const pausePanel = document.getElementById("pausePanel");
   const collectToast = document.getElementById("collectToast");
@@ -129,8 +131,8 @@
     silverado: new Image(),
     clk55: new Image(),
   };
-  vehicleSprites.silverado.src = "./sprites/silverado-game-v2.png";
-  vehicleSprites.clk55.src = "./sprites/clk55-game-v2.png";
+  vehicleSprites.silverado.src = "./sprites/silverado-game-v2.png?v=exact-cars-1";
+  vehicleSprites.clk55.src = "./sprites/clk55-game-v2.png?v=exact-cars-1";
 
   function showScreen(name) {
     state.screen = name;
@@ -627,12 +629,12 @@
   function drawPlayer(width, height, race) {
     const nearHalf = width * .48;
     const x = width / 2 + race.playerX * nearHalf * .72;
-    const y = height * .91;
+    const y = height * .965;
     const sprite = vehicleSprites[race.vehicle.id];
     const isTruck = race.vehicle.id === "silverado";
     const drawWidth = isTruck
-      ? Math.max(182, Math.min(335, width * .265))
-      : Math.max(145, Math.min(235, width * .19));
+      ? Math.max(235, Math.min(455, width * .355))
+      : Math.max(190, Math.min(340, width * .275));
     const spriteRatio = sprite.naturalWidth ? sprite.naturalHeight / sprite.naturalWidth : (isTruck ? .56 : .86);
     const drawHeight = drawWidth * spriteRatio;
 
@@ -650,9 +652,6 @@
       ctx.shadowBlur = 17;
       ctx.shadowOffsetY = 8;
       ctx.drawImage(sprite, -drawWidth / 2, -drawHeight, drawWidth, drawHeight);
-    } else {
-      ctx.fillStyle = isTruck ? "#eeeae0" : "#a66c50";
-      ctx.fillRect(-drawWidth * .33, -drawHeight * .74, drawWidth * .66, drawHeight * .66);
     }
     ctx.restore();
   }
