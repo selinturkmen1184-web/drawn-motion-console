@@ -7,7 +7,7 @@
     <meta name="description" content="TheDrawnMotion Collector's Run — üç haritalı, gamepad destekli sürüş oyunu." />
     <meta property="og:title" content="TheDrawnMotion — Collector's Run" />
     <meta property="og:description" content="İki özel araç, üç rota, tek koleksiyon." />
-    <meta property="og:image" content="./og.png" />
+    <meta property="og:image" content="../og.png" />
     <title>TheDrawnMotion — Collector's Run</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -17,7 +17,7 @@
       <header class="console-bar">
         <button class="wordmark" type="button" data-screen-target="home" aria-label="Ana menüye dön">
           <span class="logo-disc">TDM</span>
-          <span><b>TheDrawnMotion</b><small>COLLECTOR'S RUN · PROTOTYPE 02</small></span>
+          <span><b>TheDrawnMotion</b><small>COLLECTOR'S RUN · 3D DRIVER BUILD</small></span>
         </button>
         <div class="console-status">
           <span id="gamepadStatus"><i></i> GAMEPAD BEKLENİYOR</span>
@@ -117,6 +117,7 @@
             <div class="hud-right"><button id="pauseButton" type="button">Ⅱ</button><div><small>TIME</small><b id="timeLabel">00:00.0</b></div></div>
           </div>
           <div class="speed-cluster"><b id="speedLabel">000</b><span>KM/H</span><div class="speed-bar"><i id="speedBar"></i></div><small id="gearLabel">N</small></div>
+          <div class="model-status" id="modelStatus">3B MODEL HAZIRLANIYOR</div>
           <div class="countdown" id="countdown">3</div>
           <div class="toast" id="collectToast"><span>+1</span> KAYIP ÇİZİM BULUNDU</div>
           <div class="touch-controls" aria-label="Dokunmatik sürüş kontrolleri">
@@ -141,6 +142,14 @@
         </div>
       </div>
     </div>
-    <script src="./game.js?v=car-visual-4"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three.module.min.js",
+          "three/addons/": "./vendor/"
+        }
+      }
+    </script>
+    <script type="module" src="./game3d.js?v=traffic-driver-hybrid-2"></script>
   </body>
 </html>
