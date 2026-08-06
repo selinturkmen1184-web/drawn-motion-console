@@ -10,10 +10,6 @@ const vehicles = {
     className: "ADVENTURE CLASS",
     image: "./cars/silverado-front.jpg",
     resultImage: "./cars/silverado-rear.jpg",
-    photoModel: "./cars/silverado-rear-tight.png",
-    photoWidth: 3.2,
-    photoHeightScale: 1.16,
-    photoAnchorY: 0.02,
     model: "./models/silverado.glb",
     maxSpeed: 170,
     acceleration: 42,
@@ -35,10 +31,6 @@ const vehicles = {
     className: "GRAND TOURER CLASS",
     image: "./cars/clk55-city.jpg",
     resultImage: "./cars/clk55-rear.jpg",
-    photoModel: "./cars/clk55-rear-tight.png",
-    photoWidth: 1.95,
-    photoHeightScale: 1,
-    photoAnchorY: 0.02,
     model: "./models/clk55.glb",
     maxSpeed: 240,
     acceleration: 56,
@@ -208,7 +200,6 @@ dracoLoader.setDecoderPath("./vendor/draco/gltf/");
 gltfLoader.setDRACOLoader(dracoLoader);
 gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 const modelCache = new Map();
-const textureLoader = new THREE.TextureLoader();
 
 function showScreen(name) {
   state.screen = name;
@@ -588,77 +579,194 @@ function warmVehicleModel(vehicle) {
   return modelCache.get(vehicle.id);
 }
 
-async function createVolumetricPhotoCar(imported, vehicle) {
-  const texture = await textureLoader.loadAsync(vehicle.photoModel);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+function addAccessoryMesh(group, geometry, material, position, rotation) {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(position[0], position[1], position[2]);
+  if (rotation) mesh.rotation.set(rotation[0], rotation[1], rotation[2]);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  return mesh;
+}
 
-  // The photograph is now a fixed rear texture plate on the generated GLB,
-  // not a Sprite. The GLB remains fully visible for roof, sides, wheels,
-  // lighting and shadows. When the car steers, the photo turns with the body
-  // and the real mesh depth appears around it.
-  const aspect = texture.image.width / texture.image.height;
-  const panelHeight = (vehicle.photoWidth / aspect) * vehicle.photoHeightScale;
-  const rearPanel = new THREE.Mesh(
-    new THREE.PlaneGeometry(vehicle.photoWidth, panelHeight),
-    new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      alphaTest: 0.035,
-      depthWrite: true,
-      toneMapped: false,
-      side: THREE.FrontSide,
-    }),
-  );
-  rearPanel.position.set(
-    0,
-    (0.5 - vehicle.photoAnchorY) * panelHeight + 0.04,
-    vehicle.targetLength * 0.51 + 0.035,
-  );
-  rearPanel.renderOrder = 4;
+function createRoundedPanelGeometry(width, height, depth, radius) {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const corner = Math.min(radius, halfWidth, halfHeight);
+  const shape = new THREE.Shape();
+  shape.moveTo(-halfWidth + corner, -halfHeight);
+  shape.lineTo(halfWidth - corner, -halfHeight);
+  shape.quadraticCurveTo(halfWidth, -halfHeight, halfWidth, -halfHeight + corner);
+  shape.lineTo(halfWidth, halfHeight - corner);
+  shape.quadraticCurveTo(halfWidth, halfHeight, halfWidth - corner, halfHeight);
+  shape.lineTo(-halfWidth + corner, halfHeight);
+  shape.quadraticCurveTo(-halfWidth, halfHeight, -halfWidth, halfHeight - corner);
+  shape.lineTo(-halfWidth, -halfHeight + corner);
+  shape.quadraticCurveTo(-halfWidth, -halfHeight, -halfWidth + corner, -halfHeight);
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelSegments: 3,
+    bevelSize: Math.min(0.035, depth * 0.28),
+    bevelThickness: Math.min(0.035, depth * 0.28),
+    curveSegments: 8,
+  });
+  geometry.translate(0, 0, -depth / 2);
+  geometry.computeVertexNormals();
+  return geometry;
+}
 
-  const wrapper = new THREE.Group();
-  if (vehicle.truck) {
-    imported.traverse(function (child) {
-      if (!child.isMesh) return;
-      child.material.colorWrite = false;
-      child.material.depthWrite = false;
-      child.castShadow = true;
+function createProfileBodyGeometry(points, width) {
+  const shape = new THREE.Shape();
+  shape.moveTo(points[0][0], points[0][1]);
+  points.slice(1).forEach(function (point) {
+    shape.lineTo(point[0], point[1]);
+  });
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: width,
+    bevelEnabled: true,
+    bevelSegments: 3,
+    bevelSize: 0.055,
+    bevelThickness: 0.055,
+    curveSegments: 6,
+  });
+  geometry.translate(0, 0, -width / 2);
+  geometry.rotateY(Math.PI / 2);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function addSilveradoAccessories(group, vehicle) {
+  const body = makeMaterial(vehicle.color, 0.24, 0.58);
+  const black = makeMaterial(0x090c10, 0.4, 0.48);
+  const graphite = makeMaterial(0x252b31, 0.34, 0.66);
+  const silver = makeMaterial(0xb5bcc2, 0.18, 0.86);
+  const red = makeMaterial(0xb51220, 0.38, 0.34);
+  const rearZ = vehicle.targetLength * 0.51;
+
+  addAccessoryMesh(
+    group,
+    createProfileBodyGeometry([
+      [-2.72, 0.42], [-2.7, 1.28], [-0.78, 1.3], [-0.6, 1.96],
+      [1.23, 2.02], [1.55, 1.45], [2.53, 1.24], [2.72, 0.65], [2.64, 0.42],
+    ], 2.02),
+    body,
+    [0, 0, 0],
+  );
+
+  addAccessoryMesh(group, createRoundedPanelGeometry(1.98, 0.78, 0.14, 0.1), body, [0, 1.01, rearZ + 0.07]);
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.68, 0.035, 0.04), graphite, [0, 1.35, rearZ + 0.16]);
+  addAccessoryMesh(group, createRoundedPanelGeometry(0.35, 0.07, 0.055, 0.025), black, [0, 1.18, rearZ + 0.18]);
+  addAccessoryMesh(group, createRoundedPanelGeometry(1.7, 0.63, 0.08, 0.08), black, [0, 1.68, 0.54]);
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.88, 0.08, 2.3), body, [0, 1.29, 1.52]);
+  [-0.88, 0.88].forEach(function (x) {
+    addAccessoryMesh(group, createRoundedPanelGeometry(0.18, 0.56, 0.08, 0.035), red, [x, 1.03, rearZ + 0.18]);
+  });
+
+  [-0.91, 0.91].forEach(function (x) {
+    [-0.82, 1.43].forEach(function (z) {
+      addAccessoryMesh(group, new THREE.BoxGeometry(0.075, 1.18, 0.075), graphite, [x, 1.52, z]);
     });
-    const depthChassis = new THREE.Group();
-    const chassis = new THREE.Mesh(
-      new THREE.BoxGeometry(vehicle.targetWidth * 0.82, 0.52, vehicle.targetLength * 0.82),
-      makeMaterial(0x15191f, 0.34, 0.5),
+    addAccessoryMesh(group, new THREE.BoxGeometry(0.085, 0.085, 2.72), graphite, [x, 2.08, 0.32]);
+  });
+  [-0.87, 0.18, 1.22].forEach(function (z) {
+    addAccessoryMesh(group, new THREE.BoxGeometry(1.92, 0.08, 0.09), graphite, [0, 2.08, z]);
+  });
+
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.78, 0.32, 2.22), black, [0, 2.27, 0.33]);
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.86, 0.08, 2.3), silver, [0, 2.47, 0.33]);
+  addAccessoryMesh(group, new THREE.BoxGeometry(2.05, 0.18, 0.2), graphite, [0, 0.55, rearZ + 0.11]);
+  [-0.82, 0.82].forEach(function (x) {
+    addAccessoryMesh(group, new THREE.BoxGeometry(0.075, 1.28, 0.075), graphite, [x, 1.12, rearZ + 0.2]);
+  });
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.72, 0.075, 0.075), graphite, [0, 1.61, rearZ + 0.2]);
+
+  const spare = addAccessoryMesh(
+    group,
+    new THREE.CylinderGeometry(0.52, 0.52, 0.3, 24),
+    makeMaterial(0x0c0e11, 0.88, 0.08),
+    [0.26, 1.08, rearZ + 0.28],
+    [Math.PI / 2, 0, 0],
+  );
+  addAccessoryMesh(
+    spare,
+    new THREE.CylinderGeometry(0.27, 0.27, 0.31, 16),
+    silver,
+    [0, 0, 0],
+  );
+  addAccessoryMesh(group, new THREE.BoxGeometry(0.42, 0.7, 0.16), red, [-0.6, 0.98, rearZ + 0.31]);
+  addAccessoryMesh(group, new THREE.BoxGeometry(0.2, 0.96, 0.12), red, [0.78, 1.2, rearZ + 0.31], [0, 0, -0.12]);
+}
+
+function addClkAccessories(group, vehicle) {
+  const body = makeMaterial(vehicle.color, 0.22, 0.62);
+  const tan = makeMaterial(0xb78a68, 0.78, 0.05);
+  const dark = makeMaterial(0x101319, 0.3, 0.55);
+  const chrome = makeMaterial(0xc7ccd1, 0.16, 0.92);
+  const red = new THREE.MeshStandardMaterial({ color: 0xb40c18, emissive: 0x4d0006, emissiveIntensity: 1.1, roughness: 0.3 });
+  const rearZ = vehicle.targetLength * 0.5;
+
+  addAccessoryMesh(
+    group,
+    createProfileBodyGeometry([
+      [-2.33, 0.34], [-2.3, 0.78], [-1.45, 0.96], [-0.72, 1.06],
+      [0.66, 1.04], [1.35, 0.9], [2.2, 0.67], [2.33, 0.38],
+    ], 1.74),
+    body,
+    [0, 0, 0],
+  );
+
+  addAccessoryMesh(group, createRoundedPanelGeometry(1.78, 0.52, 0.16, 0.15), body, [0, 0.69, rearZ + 0.03]);
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.7, 0.16, 1.14), body, [0, 0.92, 1.73]);
+  addAccessoryMesh(group, createRoundedPanelGeometry(0.34, 0.1, 0.04, 0.03), chrome, [0, 0.78, rearZ + 0.14]);
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.62, 0.14, 0.12), dark, [0, 0.38, rearZ + 0.13]);
+  [-0.62, 0.62].forEach(function (x) {
+    addAccessoryMesh(group, createRoundedPanelGeometry(0.48, 0.18, 0.07, 0.07), red, [x, 0.78, rearZ + 0.14]);
+  });
+
+  [-0.46, 0.46].forEach(function (x) {
+    addAccessoryMesh(group, new THREE.BoxGeometry(0.52, 0.7, 0.24), tan, [x, 1.03, -0.2], [-0.08, 0, 0]);
+    addAccessoryMesh(group, new THREE.SphereGeometry(0.19, 18, 12), tan, [x, 1.46, -0.24]);
+    addAccessoryMesh(group, new THREE.TorusGeometry(0.2, 0.038, 8, 20, Math.PI), chrome, [x, 1.17, 0.42]);
+  });
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.55, 0.11, 0.09), dark, [0, 1.28, -0.82]);
+  [-0.76, 0.76].forEach(function (x) {
+    addAccessoryMesh(group, new THREE.BoxGeometry(0.07, 0.76, 0.08), dark, [x, 0.96, -0.82], [0, 0, x * -0.2]);
+  });
+  addAccessoryMesh(group, new THREE.BoxGeometry(1.36, 0.1, 0.18), chrome, [0, 0.79, rearZ + 0.02]);
+  [-0.66, -0.36].forEach(function (x) {
+    addAccessoryMesh(
+      group,
+      new THREE.CylinderGeometry(0.095, 0.095, 0.24, 18),
+      chrome,
+      [x, 0.36, rearZ + 0.11],
+      [Math.PI / 2, 0, 0],
     );
-    chassis.position.set(0, 0.72, -0.22);
-    chassis.castShadow = true;
-    chassis.receiveShadow = true;
-    depthChassis.add(chassis);
-    [-1, 1].forEach(function (side) {
-      [-vehicle.wheelBase, vehicle.wheelBase].forEach(function (z) {
-        const wheel = createWheel(vehicle.wheelRadius * 0.96, 0.38);
-        wheel.position.set(side * vehicle.targetWidth * 0.5, vehicle.wheelRadius, z);
-        depthChassis.add(wheel);
-      });
-    });
-    wrapper.add(imported, depthChassis, rearPanel);
-  } else {
-    wrapper.add(imported, rearPanel);
-  }
-  wrapper.userData.isVolumetricPhoto = true;
-  return wrapper;
+  });
+}
+
+function addVehicleAccessories(group, vehicle) {
+  // The single-view AI mesh is kept only as an internal scale reference. It is
+  // intentionally not rendered: every visible pixel of the player car comes
+  // from real-time 3D geometry, materials, lighting and shadows.
+  if (group.children[0]) group.children[0].visible = false;
+  if (vehicle.truck) addSilveradoAccessories(group, vehicle);
+  else addClkAccessories(group, vehicle);
+  group.userData.isPhotoBased = false;
+  return group;
 }
 
 async function createPlayerVehicle(vehicle) {
   modelStatus.className = "model-status";
-  modelStatus.textContent = "HACİMLİ FOTO-3B MODEL YÜKLENİYOR";
+  modelStatus.textContent = "FOTOĞRAFSIZ 3B MODEL YÜKLENİYOR";
   try {
     const gltf = await warmVehicleModel(vehicle);
     const imported = normalizeImportedCar(gltf.scene, vehicle);
-    const volumetric = await createVolumetricPhotoCar(imported, vehicle);
+    const finishedModel = addVehicleAccessories(imported, vehicle);
     modelStatus.className = "model-status ready";
-    modelStatus.textContent = "FOTO-DOKULU 3B MODEL · AKTİF";
-    return volumetric;
+    modelStatus.textContent = "FOTOĞRAFSIZ 3B MESH · AKTİF";
+    return finishedModel;
   } catch (error) {
     console.warn("GLB model yüklenemedi, yerel 3B yedek kullanılıyor.", error);
     modelStatus.className = "model-status warn";
