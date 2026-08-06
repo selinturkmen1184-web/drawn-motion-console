@@ -10,7 +10,7 @@ const vehicles = {
     className: "ADVENTURE CLASS",
     image: "./cars/silverado-front.jpg",
     resultImage: "./cars/silverado-rear.jpg",
-    model: "./models/silverado.glb",
+    model: "./models/generated/silverado-web.glb",
     maxSpeed: 170,
     acceleration: 42,
     brake: 72,
@@ -21,9 +21,10 @@ const vehicles = {
     wheelBase: 1.72,
     wheelRadius: 0.56,
     color: 0xe7e5db,
-    modelRotation: Math.PI,
+    modelRotation: 0,
     viewYaw: 0,
     truck: true,
+    tripoModel: true,
   },
   clk55: {
     id: "clk55",
@@ -31,7 +32,7 @@ const vehicles = {
     className: "GRAND TOURER CLASS",
     image: "./cars/clk55-city.jpg",
     resultImage: "./cars/clk55-rear.jpg",
-    model: "./models/clk55.glb",
+    model: "./models/generated/clk55-web.glb",
     maxSpeed: 240,
     acceleration: 56,
     brake: 84,
@@ -42,9 +43,10 @@ const vehicles = {
     wheelBase: 1.38,
     wheelRadius: 0.42,
     color: 0xa66f53,
-    modelRotation: Math.PI,
+    modelRotation: 0,
     viewYaw: 0,
     truck: false,
+    tripoModel: true,
   },
 };
 
@@ -265,7 +267,6 @@ function chooseVehicle(id) {
     card.classList.toggle("selected", selected);
     card.querySelector(".selected-mark").textContent = selected ? "SEÇİLDİ" : "SEÇ";
   });
-  warmVehicleModel(vehicles[id]);
 }
 
 function chooseMap(id) {
@@ -472,6 +473,21 @@ function normalizeImportedCar(source, vehicle) {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
+      if (vehicle.tripoModel) {
+        const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
+        const preparedMaterials = sourceMaterials.map(function (sourceMaterial) {
+          const material = sourceMaterial.clone();
+          material.envMapIntensity = 1.25;
+          if (material.map) material.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          if (material.normalMap) material.normalMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          if (material.roughnessMap) material.roughnessMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          if (material.metalnessMap) material.metalnessMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          material.needsUpdate = true;
+          return material;
+        });
+        child.material = Array.isArray(child.material) ? preparedMaterials : preparedMaterials[0];
+        return;
+      }
       const geometry = child.geometry.clone();
       geometry.computeVertexNormals();
       geometry.computeBoundingBox();
@@ -544,30 +560,32 @@ function normalizeImportedCar(source, vehicle) {
 
   const wrapper = new THREE.Group();
   wrapper.add(root);
-  const wheelWidth = vehicle.truck ? 0.38 : 0.3;
-  [-1, 1].forEach(function (side) {
-    [-vehicle.wheelBase, vehicle.wheelBase].forEach(function (z) {
-      const wheel = createWheel(vehicle.wheelRadius, wheelWidth);
-      wheel.position.set(side * vehicle.targetWidth * 0.5, vehicle.wheelRadius, z);
-      wrapper.add(wheel);
+  if (!vehicle.tripoModel) {
+    const wheelWidth = vehicle.truck ? 0.38 : 0.3;
+    [-1, 1].forEach(function (side) {
+      [-vehicle.wheelBase, vehicle.wheelBase].forEach(function (z) {
+        const wheel = createWheel(vehicle.wheelRadius, wheelWidth);
+        wheel.position.set(side * vehicle.targetWidth * 0.5, vehicle.wheelRadius, z);
+        wrapper.add(wheel);
+      });
     });
-  });
 
-  const lampHeight = vehicle.truck ? 0.92 : 0.62;
-  const lampWidth = vehicle.truck ? 0.34 : 0.28;
-  [-1, 1].forEach(function (side) {
-    const headlight = new THREE.Mesh(
-      new THREE.BoxGeometry(lampWidth, lampWidth * 0.46, 0.06),
-      new THREE.MeshStandardMaterial({ color: 0xeaf6ff, emissive: 0xb8ddff, emissiveIntensity: 2.2 }),
-    );
-    headlight.position.set(side * vehicle.targetWidth * 0.32, lampHeight, -vehicle.targetLength * 0.495);
-    const taillight = new THREE.Mesh(
-      new THREE.BoxGeometry(lampWidth, lampWidth * 0.52, 0.06),
-      new THREE.MeshStandardMaterial({ color: 0xa80f18, emissive: 0x690006, emissiveIntensity: 1.8 }),
-    );
-    taillight.position.set(side * vehicle.targetWidth * 0.34, lampHeight, vehicle.targetLength * 0.495);
-    wrapper.add(headlight, taillight);
-  });
+    const lampHeight = vehicle.truck ? 0.92 : 0.62;
+    const lampWidth = vehicle.truck ? 0.34 : 0.28;
+    [-1, 1].forEach(function (side) {
+      const headlight = new THREE.Mesh(
+        new THREE.BoxGeometry(lampWidth, lampWidth * 0.46, 0.06),
+        new THREE.MeshStandardMaterial({ color: 0xeaf6ff, emissive: 0xb8ddff, emissiveIntensity: 2.2 }),
+      );
+      headlight.position.set(side * vehicle.targetWidth * 0.32, lampHeight, -vehicle.targetLength * 0.495);
+      const taillight = new THREE.Mesh(
+        new THREE.BoxGeometry(lampWidth, lampWidth * 0.52, 0.06),
+        new THREE.MeshStandardMaterial({ color: 0xa80f18, emissive: 0x690006, emissiveIntensity: 1.8 }),
+      );
+      taillight.position.set(side * vehicle.targetWidth * 0.34, lampHeight, vehicle.targetLength * 0.495);
+      wrapper.add(headlight, taillight);
+    });
+  }
   wrapper.userData.isFallback = false;
   return wrapper;
 }
@@ -747,6 +765,11 @@ function addClkAccessories(group, vehicle) {
 }
 
 function addVehicleAccessories(group, vehicle) {
+  if (vehicle.tripoModel) {
+    group.userData.isPhotoBased = false;
+    group.userData.isGeneratedPbrModel = true;
+    return group;
+  }
   // The single-view AI mesh is kept only as an internal scale reference. It is
   // intentionally not rendered: every visible pixel of the player car comes
   // from real-time 3D geometry, materials, lighting and shadows.
@@ -759,13 +782,13 @@ function addVehicleAccessories(group, vehicle) {
 
 async function createPlayerVehicle(vehicle) {
   modelStatus.className = "model-status";
-  modelStatus.textContent = "FOTOĞRAFSIZ 3B MODEL YÜKLENİYOR";
+  modelStatus.textContent = "PBR 3B ARAÇ YÜKLENİYOR";
   try {
     const gltf = await warmVehicleModel(vehicle);
     const imported = normalizeImportedCar(gltf.scene, vehicle);
     const finishedModel = addVehicleAccessories(imported, vehicle);
     modelStatus.className = "model-status ready";
-    modelStatus.textContent = "FOTOĞRAFSIZ 3B MESH · AKTİF";
+    modelStatus.textContent = "TRIPO PBR 3B MODEL · AKTİF";
     return finishedModel;
   } catch (error) {
     console.warn("GLB model yüklenemedi, yerel 3B yedek kullanılıyor.", error);
