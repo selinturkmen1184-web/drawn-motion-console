@@ -673,11 +673,45 @@ function applyMapBackdrop(map) {
     scene.background = environmentTextureCache.get(map.id);
     return;
   }
-  textureLoader.load(map.backdrop, function (texture) {
+  textureLoader.load(map.backdrop, function (sourceTexture) {
+    const source = sourceTexture.image;
+    const backdropCanvas = document.createElement("canvas");
+    backdropCanvas.width = 2048;
+    backdropCanvas.height = 1024;
+    const context = backdropCanvas.getContext("2d");
+    const sourceRatio = source.width / source.height;
+    const targetRatio = backdropCanvas.width / backdropCanvas.height;
+    const drawHeight = sourceRatio > targetRatio ? backdropCanvas.height : backdropCanvas.width / sourceRatio;
+    const drawWidth = sourceRatio > targetRatio ? backdropCanvas.height * sourceRatio : backdropCanvas.width;
+    context.drawImage(source, (backdropCanvas.width - drawWidth) * 0.5, (backdropCanvas.height - drawHeight) * 0.42, drawWidth, drawHeight);
+
+    // The reference photo now provides only the remote sky and horizon. Its
+    // static foreground is dissolved into fog so every nearby object comes
+    // from the moving 3D road segments instead of a frozen photograph.
+    const fogColor = new THREE.Color(map.fog);
+    const red = Math.round(fogColor.r * 255);
+    const green = Math.round(fogColor.g * 255);
+    const blue = Math.round(fogColor.b * 255);
+    const lowerMask = context.createLinearGradient(0, backdropCanvas.height * 0.38, 0, backdropCanvas.height);
+    lowerMask.addColorStop(0, "rgba(" + red + "," + green + "," + blue + ",0)");
+    lowerMask.addColorStop(0.42, "rgba(" + red + "," + green + "," + blue + ",.72)");
+    lowerMask.addColorStop(1, "rgba(" + red + "," + green + "," + blue + ",1)");
+    context.fillStyle = lowerMask;
+    context.fillRect(0, 0, backdropCanvas.width, backdropCanvas.height);
+    const sideMask = context.createLinearGradient(0, 0, backdropCanvas.width, 0);
+    sideMask.addColorStop(0, "rgba(" + red + "," + green + "," + blue + ",.7)");
+    sideMask.addColorStop(0.26, "rgba(" + red + "," + green + "," + blue + ",0)");
+    sideMask.addColorStop(0.74, "rgba(" + red + "," + green + "," + blue + ",0)");
+    sideMask.addColorStop(1, "rgba(" + red + "," + green + "," + blue + ",.7)");
+    context.fillStyle = sideMask;
+    context.fillRect(0, 0, backdropCanvas.width, backdropCanvas.height);
+
+    const texture = new THREE.CanvasTexture(backdropCanvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     environmentTextureCache.set(map.id, texture);
+    sourceTexture.dispose();
     if (currentMapTheme === map.id || (state.race && state.race.map.id === map.id)) scene.background = texture;
   });
 }
@@ -1671,6 +1705,66 @@ function createForestScenery(side, index) {
   return group;
 }
 
+function createRoadsideMotionProps(side, index, map) {
+  const group = new THREE.Group();
+  group.userData.isMotionProp = true;
+  group.userData.side = side;
+  group.userData.seed = index;
+  group.userData.baseX = side * (10.75 + (index % 3) * 0.42);
+  const dark = getSceneryMaterial("motion-dark", function () { return makeMaterial(0x1b2329, 0.58, 0.38); });
+  const metal = getSceneryMaterial("motion-metal", function () { return makeMaterial(0xaab3b8, 0.42, 0.66); });
+  const glow = getSceneryMaterial("motion-glow-" + map.id, function () {
+    return new THREE.MeshStandardMaterial({ color: map.accent, emissive: map.accent, emissiveIntensity: 2.1, roughness: 0.26 });
+  });
+
+  if (map.scenery === "city") {
+    const shelter = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.15, 0.16), dark);
+    shelter.position.set(group.userData.baseX, 1.08, 0);
+    shelter.castShadow = true;
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(1.92, 1.54, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0x8fc5da, emissive: 0x16445a, emissiveIntensity: 0.52, roughness: 0.16, metalness: 0.24, transparent: true, opacity: 0.66 }),
+    );
+    glass.position.set(group.userData.baseX, 1.08, side * -0.13);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.09, 0.05), glow);
+    panel.position.set(group.userData.baseX, 1.78, side * -0.2);
+    group.add(shelter, glass, panel);
+  } else if (map.scenery === "canyon") {
+    for (let item = 0; item < 3; item += 1) {
+      const rock = new THREE.Mesh(sceneryGeometry.rock, getSceneryMaterial("motion-canyon-rock", function () {
+        return new THREE.MeshStandardMaterial({ color: 0x8b4a32, roughness: 0.98, flatShading: true });
+      }));
+      const size = 0.42 + ((index + item * 3) % 4) * 0.18;
+      rock.scale.set(size * 1.25, size * 0.72, size);
+      rock.position.set(side * (10.7 + item * 0.82), size * 0.55, -2.8 + item * 2.5);
+      rock.rotation.set(item * 0.18, index * 0.47 + item, item * -0.12);
+      rock.castShadow = true;
+      group.add(rock);
+    }
+    const warningPost = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.85, 0.1), metal);
+    warningPost.position.set(side * 11.1, 0.92, 4.4);
+    const warning = new THREE.Mesh(new THREE.CylinderGeometry(0, 0.65, 1.15, 3), glow);
+    warning.position.set(side * 11.1, 1.72, 4.34);
+    warning.rotation.z = side * Math.PI / 2;
+    group.add(warningPost, warning);
+  } else {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 2.2, 10), getSceneryMaterial("motion-log", function () {
+      return makeMaterial(0x4a3022, 0.96, 0);
+    }));
+    trunk.rotation.z = Math.PI / 2;
+    trunk.position.set(side * 11.35, 0.35, -0.8);
+    trunk.castShadow = true;
+    const routePost = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.1, 0.1), metal);
+    routePost.position.set(side * 10.95, 1.04, 4.3);
+    const routePanel = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.68, 0.11), glow);
+    routePanel.position.set(side * 10.95, 1.76, 4.3);
+    group.add(trunk, routePost, routePanel);
+  }
+  group.position.z = -13 + (index * 11) % 26;
+  group.userData.baseZ = group.position.z;
+  return group;
+}
+
 function buildRoad(map) {
   roadWorld.clear();
   roadSegments.length = 0;
@@ -1734,6 +1828,7 @@ function buildRoad(map) {
   for (let index = 0; index < SEGMENT_COUNT; index += 1) {
     const segment = new THREE.Group();
     segment.position.z = 16 - index * SEGMENT_LENGTH;
+    segment.userData.cycle = 0;
     const road = new THREE.Mesh(new THREE.BoxGeometry(18, 0.16, SEGMENT_LENGTH + 1.2), roadMaterial);
     road.position.y = -0.12;
     road.receiveShadow = true;
@@ -1824,6 +1919,9 @@ function buildRoad(map) {
           segment.add(pole, arm, lamp);
         });
       }
+      if ((index + (side > 0 ? 1 : 0)) % 2 === 0) {
+        segment.add(createRoadsideMotionProps(side, index * 3 + (side > 0 ? 1 : 0), map));
+      }
     });
 
     [-2.55, 2.55].forEach(function (laneX) {
@@ -1846,7 +1944,11 @@ function buildRoad(map) {
         if (map.scenery === "city") scenery = createCityScenery(side, seed, map);
         else if (map.scenery === "canyon") scenery = createCanyonScenery(side, seed);
         else scenery = createForestScenery(side, seed);
+        scenery.userData.isSceneryCluster = true;
+        scenery.userData.side = side;
+        scenery.userData.seed = seed;
         scenery.position.z += item ? 9 : -10;
+        scenery.userData.baseZ = scenery.position.z;
         segment.add(scenery);
       }
     }
@@ -2291,7 +2393,17 @@ function updateWorld(dt, time) {
   const travel = race.speed * dt * WORLD_SCALE;
   roadSegments.forEach(function (segment) {
     segment.position.z += travel;
-    if (segment.position.z > 37) segment.position.z -= SEGMENT_LENGTH * SEGMENT_COUNT;
+    if (segment.position.z > 37) {
+      segment.position.z -= SEGMENT_LENGTH * SEGMENT_COUNT;
+      segment.userData.cycle = (segment.userData.cycle || 0) + 1;
+      segment.children.forEach(function (child) {
+        if (!child.userData || (!child.userData.isMotionProp && !child.userData.isSceneryCluster)) return;
+        const variation = ((child.userData.seed * 7 + segment.userData.cycle * 11) % 7) - 3;
+        child.position.z = (child.userData.baseZ || 0) + variation * (child.userData.isMotionProp ? 1.35 : 0.72);
+        child.position.x = child.userData.side * variation * (child.userData.isMotionProp ? 0.22 : 0.12);
+        child.rotation.y = variation * (child.userData.isMotionProp ? 0.018 : 0.006);
+      });
+    }
     segment.position.x = 0;
     segment.rotation.y = 0;
   });
