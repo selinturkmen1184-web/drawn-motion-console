@@ -66,7 +66,7 @@ img { display: block; width: 100%; }
   transition: transform .32s ease, opacity .32s ease;
 }
 .console-bar::after {
-  content: 'LIVE / 25';
+  content: 'LIVE / 27';
   position: absolute;
   left: 50%;
   top: 50%;
@@ -235,9 +235,9 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .map-card.selected .map-check { display: grid; }
 
 .game-screen { position: relative; padding: 0; overflow: hidden; background: #09111c; }
-#gameCanvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
-.game-screen::before { content: ''; position: absolute; z-index: 2; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 48%, rgba(3,8,14,.18) 72%, rgba(2,5,9,.72) 100%); transition: .25s ease; }
-.game-screen::after { content: ''; position: absolute; z-index: 2; inset: 0; pointer-events: none; opacity: .07; background: repeating-linear-gradient(0deg, transparent 0 3px, #a7dded 3px 4px); mix-blend-mode: overlay; }
+#gameCanvas { position: absolute; inset: 0; width: 100%; height: 100%; filter: saturate(1.08) contrast(1.055); touch-action: none; }
+.game-screen::before { content: ''; position: absolute; z-index: 2; inset: 0; pointer-events: none; background: linear-gradient(180deg,rgba(2,6,11,.28),transparent 14%,transparent 78%,rgba(2,5,9,.38)), radial-gradient(ellipse at 50% 44%, transparent 48%, rgba(3,8,14,.14) 70%, rgba(2,5,9,.68) 100%); box-shadow: inset 0 0 120px rgba(0,0,0,.24); transition: .25s ease; }
+.game-screen::after { content: ''; position: absolute; z-index: 2; inset: 0; pointer-events: none; opacity: .016; background: repeating-linear-gradient(0deg, transparent 0 6px, #b8eaff 6px 7px), repeating-linear-gradient(90deg,transparent 0 179px,rgba(104,225,255,.14) 180px); mix-blend-mode: screen; }
 .game-screen.boosting::before { background: radial-gradient(ellipse at 50% 45%, transparent 37%, rgba(104,225,255,.07) 64%, rgba(2,7,12,.74) 100%); }
 .game-screen.impact::before { background: radial-gradient(ellipse at 50% 45%, transparent 18%, rgba(255,89,74,.72) 100%); }
 .game-screen.offroad::before { box-shadow: inset 0 0 80px rgba(255,89,74,.18); }
@@ -257,7 +257,7 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 
 .game-hud { position: absolute; z-index: 4; top: 20px; left: 20px; right: 20px; display: grid; grid-template-columns: 1fr minmax(260px,.75fr) 1fr; align-items: start; pointer-events: none; }
 .hud-left { display: flex; gap: 8px; }
-.hud-vehicle, .mission, .hud-right > div, .hud-center { border: 1px solid rgba(200,225,239,.14); background: linear-gradient(135deg, rgba(8,17,27,.82), rgba(8,17,27,.56)); backdrop-filter: blur(16px); }
+.hud-vehicle, .mission, .hud-right > div, .hud-center { border: 1px solid rgba(200,225,239,.2); background: linear-gradient(135deg, rgba(6,14,23,.92), rgba(11,26,39,.68)); box-shadow: 0 14px 36px rgba(0,0,0,.2), inset 0 1px rgba(255,255,255,.035); backdrop-filter: blur(18px); }
 .hud-vehicle { position: relative; width: 210px; height: 58px; display: flex; align-items: center; padding: 5px; clip-path: polygon(0 0,94% 0,100% 24%,100% 100%,0 100%); }
 .hud-vehicle::after { content: ''; position: absolute; bottom: 0; left: 0; width: 34%; height: 2px; background: var(--electric); }
 .hud-vehicle img { width: 52px; height: 46px; margin-right: 10px; object-fit: cover; filter: saturate(.75); }
@@ -291,26 +291,26 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .race-telemetry em { margin-left: 6px; color: var(--electric); font: 600 6px/1 var(--mono); letter-spacing: .08em; font-style: normal; }
 .race-telemetry .telemetry-speed strong { color: var(--electric); text-shadow: 0 0 18px rgba(104,225,255,.2); }
 
-.speed-cluster { position: absolute; z-index: 4; right: 31px; bottom: 28px; width: 184px; height: 184px; display: grid; place-items: center; text-align: center; pointer-events: none; }
-.speed-cluster::before { content: ''; position: absolute; inset: 0; border: 1px solid rgba(205,230,242,.18); border-radius: 50%; background: radial-gradient(circle, rgba(8,17,27,.8) 0 54%, transparent 55%), conic-gradient(from 225deg, var(--electric) 0 8%, rgba(255,255,255,.12) 8% 75%, transparent 75%); clip-path: polygon(0 0,100% 0,100% 83%,83% 100%,17% 100%,0 83%); }
-.speed-cluster::after { content: ''; position: absolute; inset: 12px; border: 1px dashed rgba(104,225,255,.19); border-radius: 50%; }
+.speed-cluster { position: absolute; z-index: 4; right: 27px; bottom: 24px; width: 198px; height: 198px; display: grid; place-items: center; text-align: center; filter: drop-shadow(0 18px 30px rgba(0,0,0,.42)); pointer-events: none; }
+.speed-cluster::before { content: ''; position: absolute; inset: 0; border: 1px solid rgba(205,230,242,.25); border-radius: 50%; background: radial-gradient(circle, rgba(5,13,21,.92) 0 51%, rgba(8,21,32,.72) 52% 62%, transparent 63%), repeating-conic-gradient(from 224deg,rgba(255,255,255,.34) 0 .55deg,transparent .55deg 6deg), conic-gradient(from 225deg, var(--electric) 0 9%, rgba(255,255,255,.1) 9% 75%, transparent 75%); clip-path: polygon(0 0,100% 0,100% 83%,83% 100%,17% 100%,0 83%); }
+.speed-cluster::after { content: ''; position: absolute; inset: 15px; border: 1px solid rgba(104,225,255,.2); border-radius: 50%; box-shadow: inset 0 0 32px rgba(104,225,255,.05); }
 .speed-caption { position: absolute; z-index: 1; top: 43px; color: #637181; font: 500 5px/1 var(--mono); letter-spacing: .18em; }
 .speed-cluster > b { position: relative; z-index: 1; margin-top: 7px; font: 600 53px/.8 var(--display); letter-spacing: -.06em; }
 .speed-cluster > span { position: absolute; z-index: 1; top: 106px; color: var(--muted); font: 500 6px/1 var(--mono); letter-spacing: .15em; }
 .speed-bar { position: absolute; z-index: 1; left: 43px; right: 43px; bottom: 46px; height: 2px; background: rgba(255,255,255,.18); }
 .speed-bar i { display: block; height: 100%; background: var(--red); box-shadow: 0 0 8px rgba(255,89,74,.7); }
 .speed-cluster > small#gearLabel { position: absolute; z-index: 2; right: 12px; bottom: 19px; width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid var(--line-hot); background: #0b1520; color: var(--electric); font: 600 10px/1 var(--mono); }
-.drive-score { position: absolute; z-index: 4; left: 29px; bottom: 30px; min-width: 180px; pointer-events: none; }
+.drive-score { position: absolute; z-index: 4; left: 25px; bottom: 25px; min-width: 218px; padding: 15px 17px 14px; border: 1px solid rgba(200,225,239,.18); background: linear-gradient(120deg,rgba(5,13,21,.9),rgba(8,22,34,.52)); box-shadow: 0 18px 42px rgba(0,0,0,.28), inset 3px 0 var(--electric); clip-path: polygon(0 0,94% 0,100% 20%,100% 100%,0 100%); backdrop-filter: blur(16px); pointer-events: none; }
 .drive-score small, .boost-cluster small { display: block; color: #718090; font: 500 6px/1 var(--mono); letter-spacing: .15em; }
 .drive-score small i { margin-left: 8px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.2); color: var(--electric); font-style: normal; }
 .drive-score > b { display: inline-block; margin-top: 9px; font: 600 28px/.9 var(--display); letter-spacing: .02em; }
 .drive-score > em { display: inline-grid; place-items: center; min-width: 42px; height: 23px; margin-left: 7px; padding: 0 7px; border: 1px solid var(--line-hot); color: var(--electric); font: 600 8px/1 var(--mono); font-style: normal; }
 .drive-score > em.hot { background: var(--electric); color: var(--ink); box-shadow: 0 0 28px rgba(104,225,255,.25); }
-.clean-progress { width: 180px; margin-top: 10px; }
+.clean-progress { width: 188px; margin-top: 10px; }
 .clean-progress > span { display: block; margin-bottom: 6px; color: #5e6c7a; font: 500 5px/1 var(--mono); letter-spacing: .14em; }
 .clean-progress > i { display: block; height: 2px; overflow: hidden; background: rgba(255,255,255,.16); }
 .clean-progress > i > b { display: block; width: 0; height: 100%; background: var(--electric); box-shadow: 0 0 10px rgba(104,225,255,.72); transition: width .18s linear; }
-.boost-cluster { position: absolute; z-index: 4; right: 224px; bottom: 41px; width: 158px; padding: 10px 12px; border-left: 1px solid var(--line-hot); background: linear-gradient(90deg, rgba(8,17,27,.48), transparent); pointer-events: none; }
+.boost-cluster { position: absolute; z-index: 4; right: 230px; bottom: 35px; width: 168px; padding: 12px 14px; border: 1px solid rgba(200,225,239,.14); border-left: 2px solid var(--line-hot); background: linear-gradient(90deg, rgba(5,13,21,.84), rgba(8,17,27,.3)); box-shadow: 0 14px 34px rgba(0,0,0,.22); backdrop-filter: blur(12px); pointer-events: none; }
 .boost-cluster > div { height: 3px; margin: 9px 30px 5px 0; overflow: hidden; background: rgba(255,255,255,.17); }
 .boost-cluster > div i { display: block; width: 100%; height: 100%; background: var(--gold); box-shadow: 0 0 12px rgba(240,189,100,.6); transform-origin: left center; }
 .boost-cluster b { position: absolute; right: 8px; bottom: 13px; font: 600 16px/1 var(--display); }
