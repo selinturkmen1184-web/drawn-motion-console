@@ -1125,73 +1125,11 @@ async function createPlayerVehicle(vehicle) {
 }
 
 function createCityScenery(side, index, map) {
-  const width = 5 + (index % 3) * 2;
-  const height = 10 + (index % 5) * 5;
-  const depth = 5 + ((index + 2) % 4) * 2;
-  const facade = getCityFacadeTexture();
-  const material = new THREE.MeshStandardMaterial({
-    color: index % 2 ? 0x101a29 : 0x172538,
-    map: facade,
-    emissiveMap: facade,
-    roughness: 0.48,
-    metalness: 0.34,
-    emissive: index % 3 ? 0x102b45 : 0x17435a,
-    emissiveIntensity: 1.18,
-  });
-  const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
-  building.position.set(side * (19 + (index % 4) * 3.6), height / 2 - 0.05, (index % 3 - 1) * 8);
-  building.castShadow = true;
-  building.receiveShadow = true;
-  const beacon = new THREE.Mesh(
-    new THREE.BoxGeometry(width * 0.72, 0.1, depth * 0.055),
-    new THREE.MeshBasicMaterial({ color: map.accent }),
-  );
-  beacon.position.set(building.position.x, Math.min(height - 1.4, height * 0.72), building.position.z + depth * 0.51);
-  const group = new THREE.Group();
-  group.add(building, beacon);
-  const crown = new THREE.Mesh(
-    new THREE.BoxGeometry(width * 0.72, Math.max(1.6, height * 0.15), depth * 0.72),
-    material.clone(),
-  );
-  crown.position.set(building.position.x, height + crown.geometry.parameters.height * 0.45, building.position.z);
-  crown.castShadow = true;
-  group.add(crown);
-  const roof = new THREE.Mesh(
-    new THREE.BoxGeometry(width * 0.38, 0.7, depth * 0.38),
-    makeMaterial(0x111820, 0.55, 0.58),
-  );
-  roof.position.set(building.position.x, height + crown.geometry.parameters.height + 0.18, building.position.z);
-  const antenna = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.035, 0.055, 3.2 + (index % 3), 8),
-    makeMaterial(0x8998a5, 0.28, 0.82),
-  );
-  antenna.position.set(building.position.x, roof.position.y + 1.8, building.position.z);
-  group.add(roof, antenna);
-  return group;
+  return new THREE.Group();
 }
 
 function createCanyonScenery(side, index) {
-  const group = new THREE.Group();
-  const rockMaterial = makeMaterial(index % 2 ? 0x4f3027 : 0x69402f, 0.98, 0);
-  for (let item = 0; item < 3; item += 1) {
-    const radius = 0.75 + ((index + item * 2) % 4) * 0.34;
-    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(radius, 0), rockMaterial);
-    rock.scale.set(1.4 + item * 0.22, 0.48 + (item % 2) * 0.18, 0.9 + item * 0.12);
-    rock.position.set(side * item * 1.15, radius * 0.55, (item - 1) * 2.2);
-    rock.rotation.set(index * 0.13 + item, index * 0.28, side * 0.08);
-    rock.castShadow = true;
-    rock.receiveShadow = true;
-    group.add(rock);
-  }
-  const scrub = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.72, 1),
-    makeMaterial(index % 2 ? 0x4e4b29 : 0x5f5730, 1, 0),
-  );
-  scrub.scale.set(1.4, 0.62, 1.1);
-  scrub.position.set(-side * 1.6, 0.42, 1.7);
-  group.add(scrub);
-  group.position.set(side * (21.5 + (index % 5) * 2.4), 0, (index % 3 - 1) * 8);
-  return group;
+  return new THREE.Group();
 }
 
 function createForestScenery(side, index) {
