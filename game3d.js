@@ -58,13 +58,13 @@ const maps = {
     timeLimit: 64,
     pages: [440, 970, 1510, 2070],
     pageLanes: [-1, 1, 0, -1],
-    sky: 0x060b19,
-    fog: 0x101527,
+    sky: 0x030914,
+    fog: 0x0b1525,
     fogDensity: 0.012,
-    road: 0x242a34,
-    shoulder: 0x171b24,
-    line: 0xdce6f5,
-    accent: 0xff4c28,
+    road: 0x151c25,
+    shoulder: 0x0b121a,
+    line: 0xbdefff,
+    accent: 0x68e1ff,
     traffic: 11,
     scenery: "city",
   },
@@ -75,13 +75,13 @@ const maps = {
     timeLimit: 70,
     pages: [510, 1120, 1800, 2470],
     pageLanes: [1, -1, 0, 1],
-    sky: 0xd96a38,
-    fog: 0x9b4c2d,
+    sky: 0x8f402e,
+    fog: 0x713726,
     fogDensity: 0.009,
-    road: 0x332d2b,
-    shoulder: 0x7d3826,
-    line: 0xffe2a6,
-    accent: 0xf2c451,
+    road: 0x211c1b,
+    shoulder: 0x5a271d,
+    line: 0xffe7c0,
+    accent: 0xff7152,
     traffic: 7,
     scenery: "canyon",
   },
@@ -92,13 +92,13 @@ const maps = {
     timeLimit: 72,
     pages: [390, 1050, 1720, 2310],
     pageLanes: [0, 1, -1, 0],
-    sky: 0x91ada8,
-    fog: 0x6d8278,
+    sky: 0x527173,
+    fog: 0x354e51,
     fogDensity: 0.013,
-    road: 0x292e31,
-    shoulder: 0x26372b,
-    line: 0xf1efde,
-    accent: 0xd4ff43,
+    road: 0x162024,
+    shoulder: 0x152b24,
+    line: 0xdcefdc,
+    accent: 0x91ffc7,
     traffic: 8,
     scenery: "forest",
   },
@@ -179,15 +179,15 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.08;
+renderer.toneMappingExposure = 0.98;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 900);
 camera.position.set(0, 3.35, 14.2);
 
-const hemisphere = new THREE.HemisphereLight(0xddeeff, 0x1c1c1c, 2.1);
+const hemisphere = new THREE.HemisphereLight(0xcceeff, 0x111722, 2.25);
 scene.add(hemisphere);
-const sun = new THREE.DirectionalLight(0xffffff, 3.2);
+const sun = new THREE.DirectionalLight(0xf2f8ff, 3.05);
 sun.position.set(-12, 24, 10);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1536, 1536);
@@ -227,6 +227,7 @@ function showScreen(name) {
   Object.entries(screens).forEach(function (entry) {
     entry[1].classList.toggle("active", entry[0] === name);
   });
+  screens[name].scrollTop = 0;
   app.classList.toggle("racing", name === "game");
   document.body.scrollTop = 0;
   document.documentElement.scrollTop = 0;
@@ -948,18 +949,18 @@ function createCityScenery(side, index, map) {
   const height = 10 + (index % 5) * 5;
   const depth = 5 + ((index + 2) % 4) * 2;
   const material = new THREE.MeshStandardMaterial({
-    color: index % 2 ? 0x161d2d : 0x29223a,
-    roughness: 0.82,
-    metalness: 0.12,
-    emissive: index % 3 ? 0x090d1b : 0x28100d,
-    emissiveIntensity: 0.8,
+    color: index % 2 ? 0x101a29 : 0x172538,
+    roughness: 0.72,
+    metalness: 0.2,
+    emissive: index % 3 ? 0x071322 : 0x0b2431,
+    emissiveIntensity: 0.95,
   });
   const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   building.position.set(side * (15 + (index % 4) * 3), height / 2 - 0.05, (index % 3 - 1) * 8);
   building.castShadow = true;
   building.receiveShadow = true;
   const beacon = new THREE.Mesh(
-    new THREE.BoxGeometry(width * 0.7, 0.18, depth * 0.08),
+    new THREE.BoxGeometry(width * 0.72, 0.1, depth * 0.055),
     new THREE.MeshBasicMaterial({ color: map.accent }),
   );
   beacon.position.set(building.position.x, Math.min(height - 1.4, height * 0.72), building.position.z + depth * 0.51);
@@ -969,7 +970,7 @@ function createCityScenery(side, index, map) {
 }
 
 function createCanyonScenery(side, index) {
-  const color = index % 2 ? 0x7b3523 : 0x9f4b2b;
+  const color = index % 2 ? 0x672f25 : 0x87412f;
   const rock = new THREE.Mesh(
     new THREE.DodecahedronGeometry(3.5 + (index % 4) * 1.2, 0),
     makeMaterial(color, 0.96, 0),
@@ -985,9 +986,9 @@ function createCanyonScenery(side, index) {
 function createForestScenery(side, index) {
   const group = new THREE.Group();
   const height = 6 + (index % 5) * 1.4;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, height * 0.42, 8), makeMaterial(0x4b3527, 1, 0));
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, height * 0.42, 8), makeMaterial(0x302e2a, 1, 0));
   trunk.position.y = height * 0.21;
-  const crownMaterial = makeMaterial(index % 2 ? 0x173b2c : 0x23513a, 0.94, 0);
+  const crownMaterial = makeMaterial(index % 2 ? 0x12352e : 0x1b493b, 0.94, 0);
   for (let level = 0; level < 3; level += 1) {
     const crown = new THREE.Mesh(
       new THREE.ConeGeometry(2.2 - level * 0.34, height * 0.46, 10),
@@ -1007,10 +1008,10 @@ function buildRoad(map) {
   roadSegments.length = 0;
   scene.background = new THREE.Color(map.sky);
   scene.fog = new THREE.FogExp2(map.fog, map.fogDensity);
-  hemisphere.color.set(map.scenery === "canyon" ? 0xffd6a0 : 0xdcecff);
-  hemisphere.groundColor.set(map.scenery === "forest" ? 0x18261d : 0x252024);
-  sun.color.set(map.scenery === "canyon" ? 0xffc28f : 0xffffff);
-  sun.intensity = map.scenery === "city" ? 2.2 : 3.6;
+  hemisphere.color.set(map.scenery === "canyon" ? 0xffc7a2 : map.scenery === "forest" ? 0xc9eee5 : 0xbfe8ff);
+  hemisphere.groundColor.set(map.scenery === "forest" ? 0x10251f : map.scenery === "canyon" ? 0x342019 : 0x0b1320);
+  sun.color.set(map.scenery === "canyon" ? 0xffb584 : map.scenery === "forest" ? 0xd9fff0 : 0xe7f6ff);
+  sun.intensity = map.scenery === "city" ? 2.05 : 3.35;
 
   const roadMaterial = makeMaterial(map.road, 0.88, 0.05);
   roadMaterial.map = createAsphaltTexture();
@@ -1018,8 +1019,8 @@ function buildRoad(map) {
   const lineMaterial = new THREE.MeshStandardMaterial({
     color: map.line,
     roughness: 0.45,
-    emissive: map.scenery === "city" ? 0x29364c : 0x000000,
-    emissiveIntensity: 0.55,
+    emissive: map.scenery === "city" ? 0x193e53 : 0x000000,
+    emissiveIntensity: 0.72,
   });
   const railMaterial = makeMaterial(0xbac1c8, 0.34, 0.72);
   const postMaterial = makeMaterial(0x858d95, 0.46, 0.64);
@@ -1029,6 +1030,14 @@ function buildRoad(map) {
     emissiveIntensity: 2.4,
     roughness: 0.28,
   });
+  const edgeGlowMaterial = new THREE.MeshStandardMaterial({
+    color: map.accent,
+    emissive: map.accent,
+    emissiveIntensity: map.scenery === "city" ? 1.8 : 0.82,
+    roughness: 0.34,
+    metalness: 0.2,
+  });
+  const beaconMaterial = new THREE.MeshBasicMaterial({ color: map.accent });
   const signMaterial = new THREE.MeshStandardMaterial({
     color: map.scenery === "canyon" ? 0x5e2e22 : map.scenery === "forest" ? 0x173f31 : 0x172c43,
     emissive: map.scenery === "city" ? 0x071424 : 0x000000,
@@ -1053,6 +1062,9 @@ function buildRoad(map) {
       const edgeLine = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.03, SEGMENT_LENGTH + 0.9), lineMaterial);
       edgeLine.position.set(side * 8.55, 0.012, 0);
       segment.add(edgeLine);
+      const edgeGlow = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.025, SEGMENT_LENGTH + 0.75), edgeGlowMaterial);
+      edgeGlow.position.set(side * 8.82, 0.018, 0);
+      segment.add(edgeGlow);
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, SEGMENT_LENGTH + 0.8), railMaterial);
       rail.position.set(side * 9.7, 0.62, 0);
       rail.castShadow = true;
@@ -1065,6 +1077,11 @@ function buildRoad(map) {
         reflector.position.set(side * 9.61, 0.58, z + 0.02);
         segment.add(post, reflector);
       });
+      const archivePost = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.55, 0.08), postMaterial);
+      archivePost.position.set(side * 10.35, 0.77, -13.5);
+      const archiveBeacon = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.08, 0.22), beaconMaterial);
+      archiveBeacon.position.set(side * 10.35, 1.58, -13.5);
+      segment.add(archivePost, archiveBeacon);
     });
 
     [-2.55, 2.55].forEach(function (laneX) {
@@ -1072,6 +1089,11 @@ function buildRoad(map) {
         const mark = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.035, 3.4), lineMaterial);
         mark.position.set(laneX, 0.01, -SEGMENT_LENGTH / 2 + 4 + dash * 7);
         segment.add(mark);
+        if (dash % 2 === 0) {
+          const laneBeacon = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.035, 0.16), edgeGlowMaterial);
+          laneBeacon.position.set(laneX, 0.025, mark.position.z + 2.25);
+          segment.add(laneBeacon);
+        }
       }
     });
 
@@ -1117,7 +1139,7 @@ function buildRoad(map) {
 }
 
 function createTrafficVehicle(index) {
-  const palette = [0x1d2737, 0xc7c9c6, 0x8b1520, 0x305d75, 0xd98a22, 0x252525];
+  const palette = [0x152337, 0xc8d1d3, 0x8f2830, 0x2c6577, 0xb7783d, 0x1c222a];
   const template = { color: palette[index % palette.length], truck: index % 5 === 0 || index % 9 === 6 };
   const vehicle = {
     color: template.color,
@@ -1185,15 +1207,15 @@ function buildCollectibles(map) {
   collectibleCards.length = 0;
   map.pages.forEach(function (distance, index) {
     const group = new THREE.Group();
-    const glow = new THREE.PointLight(map.accent, 3.2, 12);
+    const glow = new THREE.PointLight(map.accent, 3.6, 13);
     glow.position.y = 2.1;
     const card = new THREE.Mesh(
       new THREE.BoxGeometry(1.05, 1.45, 0.08),
       new THREE.MeshStandardMaterial({
-        color: 0xf3efe4,
+        color: 0xe9efec,
         roughness: 0.55,
         emissive: map.accent,
-        emissiveIntensity: 0.08,
+        emissiveIntensity: 0.15,
       }),
     );
     card.position.y = 1.55;
