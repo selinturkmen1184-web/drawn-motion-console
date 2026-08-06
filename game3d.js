@@ -228,7 +228,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.98;
+renderer.toneMappingExposure = 1.08;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 900);
@@ -275,7 +275,13 @@ sun.shadow.camera.left = -24;
 sun.shadow.camera.right = 24;
 sun.shadow.camera.top = 30;
 sun.shadow.camera.bottom = -8;
-scene.add(sun);
+sun.shadow.bias = -0.00018;
+sun.shadow.normalBias = 0.035;
+const roadFill = new THREE.DirectionalLight(0x8edcff, 1.25);
+roadFill.position.set(10, 7, 8);
+const vehicleRim = new THREE.DirectionalLight(0xffb277, 1.1);
+vehicleRim.position.set(-8, 4, -10);
+scene.add(sun, roadFill, vehicleRim);
 
 const world = new THREE.Group();
 const roadWorld = new THREE.Group();
@@ -306,6 +312,18 @@ const environmentTextureCache = new Map();
 const textureLoader = new THREE.TextureLoader();
 let cityFacadeTexture = null;
 let pineTexture = null;
+let asphaltTexture = null;
+let asphaltReliefTexture = null;
+let canyonRockTexture = null;
+let canyonRockReliefTexture = null;
+const sceneryMaterials = new Map();
+const sceneryGeometry = {
+  cube: new THREE.BoxGeometry(1, 1, 1),
+  rock: new THREE.IcosahedronGeometry(1, 1),
+  mesa: new THREE.CylinderGeometry(0.72, 1, 1, 7),
+  trunk: new THREE.CylinderGeometry(0.1, 0.16, 1, 7),
+  pinePlane: new THREE.PlaneGeometry(1, 1),
+};
 
 function showScreen(name) {
   state.screen = name;
@@ -565,37 +583,87 @@ function makeMaterial(color, roughness, metalness) {
 }
 
 function createAsphaltTexture() {
+  if (asphaltTexture) return asphaltTexture;
+  asphaltTexture = textureLoader.load("./maps/asphalt-seamless-v1.jpg");
+  asphaltTexture.wrapS = THREE.RepeatWrapping;
+  asphaltTexture.wrapT = THREE.RepeatWrapping;
+  asphaltTexture.repeat.set(2.7, 7.4);
+  asphaltTexture.colorSpace = THREE.SRGBColorSpace;
+  asphaltTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
+  return asphaltTexture;
+}
+
+function createAsphaltReliefTexture() {
+  if (asphaltReliefTexture) return asphaltReliefTexture;
   const textureCanvas = document.createElement("canvas");
-  textureCanvas.width = 192;
-  textureCanvas.height = 384;
+  textureCanvas.width = 256;
+  textureCanvas.height = 512;
   const context = textureCanvas.getContext("2d");
-  context.fillStyle = "#c2c3c4";
+  context.fillStyle = "#858585";
   context.fillRect(0, 0, textureCanvas.width, textureCanvas.height);
-  for (let index = 0; index < 5200; index += 1) {
-    const tone = 145 + (index * 37) % 68;
+  for (let index = 0; index < 9000; index += 1) {
+    const tone = 82 + (index * 47) % 92;
     context.fillStyle = "rgb(" + tone + "," + tone + "," + tone + ")";
-    context.globalAlpha = 0.12 + ((index * 13) % 30) / 100;
-    const x = (index * 67) % textureCanvas.width;
-    const y = (index * 109) % textureCanvas.height;
-    context.fillRect(x, y, 1 + (index % 3), 1 + (index % 2));
+    context.globalAlpha = 0.16 + ((index * 13) % 32) / 100;
+    const x = (index * 67 + index * index * 3) % textureCanvas.width;
+    const y = (index * 109 + index * index) % textureCanvas.height;
+    const grain = 1 + (index % 3);
+    context.fillRect(x, y, grain, grain * 0.65);
   }
-  context.globalAlpha = 0.1;
-  context.strokeStyle = "#56585b";
-  context.lineWidth = 2;
-  [42, 76, 118, 151].forEach(function (x, index) {
+  context.globalAlpha = 0.2;
+  context.strokeStyle = "#343434";
+  context.lineWidth = 1.2;
+  [47, 98, 166, 211].forEach(function (x, index) {
     context.beginPath();
     context.moveTo(x, 0);
-    context.bezierCurveTo(x + 3, 120, x - 4, 250, x + index - 2, 384);
+    context.bezierCurveTo(x + 5, 160, x - 7, 340, x + index - 2, 512);
     context.stroke();
   });
   context.globalAlpha = 1;
-  const texture = new THREE.CanvasTexture(textureCanvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(3.6, 8);
+  asphaltReliefTexture = new THREE.CanvasTexture(textureCanvas);
+  asphaltReliefTexture.wrapS = THREE.RepeatWrapping;
+  asphaltReliefTexture.wrapT = THREE.RepeatWrapping;
+  asphaltReliefTexture.repeat.set(3.2, 8.4);
+  asphaltReliefTexture.colorSpace = THREE.NoColorSpace;
+  asphaltReliefTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
+  return asphaltReliefTexture;
+}
+
+function createReflectionEnvironment(map) {
+  const cacheKey = "reflection-" + map.id;
+  if (environmentTextureCache.has(cacheKey)) return environmentTextureCache.get(cacheKey);
+  const envCanvas = document.createElement("canvas");
+  envCanvas.width = 1024;
+  envCanvas.height = 512;
+  const context = envCanvas.getContext("2d");
+  const skyColor = map.scenery === "city" ? "#112a43" : map.scenery === "canyon" ? "#d78955" : "#9fc8c1";
+  const horizonColor = map.scenery === "city" ? "#9ddfff" : map.scenery === "canyon" ? "#ffd2a0" : "#e5f2dd";
+  const groundColor = map.scenery === "city" ? "#071018" : map.scenery === "canyon" ? "#4b281d" : "#142720";
+  const gradient = context.createLinearGradient(0, 0, 0, 512);
+  gradient.addColorStop(0, skyColor);
+  gradient.addColorStop(0.46, horizonColor);
+  gradient.addColorStop(0.56, groundColor);
+  gradient.addColorStop(1, "#05080b");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 1024, 512);
+  const sunX = map.scenery === "canyon" ? 760 : map.scenery === "forest" ? 290 : 875;
+  const glow = context.createRadialGradient(sunX, 225, 4, sunX, 225, map.scenery === "city" ? 110 : 170);
+  glow.addColorStop(0, map.scenery === "city" ? "rgba(170,231,255,.92)" : "rgba(255,238,196,.98)");
+  glow.addColorStop(0.16, map.scenery === "city" ? "rgba(82,185,255,.46)" : "rgba(255,180,111,.48)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = glow;
+  context.fillRect(0, 0, 1024, 512);
+  const texture = new THREE.CanvasTexture(envCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  texture.needsUpdate = true;
+  environmentTextureCache.set(cacheKey, texture);
   return texture;
+}
+
+function getSceneryMaterial(key, factory) {
+  if (!sceneryMaterials.has(key)) sceneryMaterials.set(key, factory());
+  return sceneryMaterials.get(key);
 }
 
 function applyMapBackdrop(map) {
@@ -684,41 +752,112 @@ function getCityFacadeTexture() {
 function getPineTexture() {
   if (pineTexture) return pineTexture;
   const pineCanvas = document.createElement("canvas");
-  pineCanvas.width = 256;
-  pineCanvas.height = 512;
+  pineCanvas.width = 384;
+  pineCanvas.height = 768;
   const context = pineCanvas.getContext("2d");
-  context.clearRect(0, 0, 256, 512);
-  const trunkGradient = context.createLinearGradient(110, 0, 146, 0);
-  trunkGradient.addColorStop(0, "rgba(40,32,25,.92)");
-  trunkGradient.addColorStop(0.5, "rgba(88,66,45,.98)");
-  trunkGradient.addColorStop(1, "rgba(34,27,22,.9)");
+  context.clearRect(0, 0, pineCanvas.width, pineCanvas.height);
+  const trunkGradient = context.createLinearGradient(168, 0, 216, 0);
+  trunkGradient.addColorStop(0, "rgba(34,29,24,.96)");
+  trunkGradient.addColorStop(0.5, "rgba(96,70,47,.98)");
+  trunkGradient.addColorStop(1, "rgba(29,25,22,.96)");
   context.fillStyle = trunkGradient;
-  context.fillRect(116, 238, 24, 258);
-  const foliage = [
-    [128, 18, 26, 220], [128, 72, 48, 258], [128, 132, 73, 300],
-    [128, 204, 101, 350], [128, 282, 120, 408],
-  ];
-  foliage.forEach(function (layer, index) {
-    const gradient = context.createLinearGradient(0, layer[1], 0, layer[3]);
-    gradient.addColorStop(0, index % 2 ? "rgba(50,103,78,.98)" : "rgba(37,84,65,.98)");
-    gradient.addColorStop(1, "rgba(10,38,30,.98)");
-    context.fillStyle = gradient;
+  context.fillRect(179, 190, 28, 548);
+
+  const branchColors = ["rgba(16,49,36,.98)", "rgba(24,69,49,.98)", "rgba(37,84,59,.96)", "rgba(52,98,70,.9)"];
+  for (let spray = 0; spray < 520; spray += 1) {
+    const y = 54 + (spray * 43 + spray * spray * 3) % 628;
+    const depth = THREE.MathUtils.clamp((y - 34) / 650, 0.04, 1);
+    const maxWidth = 18 + Math.pow(depth, 0.76) * 154;
+    const offset = (((spray * 97) % 1000) / 1000 * 2 - 1) * maxWidth;
+    const radiusX = 7 + (spray * 13) % 19;
+    const radiusY = 3 + (spray * 7) % 8;
+    context.fillStyle = branchColors[(spray * 7) % branchColors.length];
+    context.globalAlpha = 0.18 + (spray % 7) * 0.055;
     context.beginPath();
-    context.moveTo(layer[0], layer[1]);
-    context.lineTo(layer[0] + layer[2] * 0.45, layer[1] + (layer[3] - layer[1]) * 0.45);
-    context.lineTo(layer[0] + layer[2] * 0.7, layer[1] + (layer[3] - layer[1]) * 0.62);
-    context.lineTo(layer[0] + layer[2], layer[3]);
-    context.lineTo(layer[0], layer[3] - 18);
-    context.lineTo(layer[0] - layer[2], layer[3]);
-    context.lineTo(layer[0] - layer[2] * 0.66, layer[1] + (layer[3] - layer[1]) * 0.61);
-    context.lineTo(layer[0] - layer[2] * 0.42, layer[1] + (layer[3] - layer[1]) * 0.44);
-    context.closePath();
+    context.ellipse(192 + offset, y, radiusX, radiusY, offset * 0.0038, 0, Math.PI * 2);
     context.fill();
-  });
+  }
+  context.globalAlpha = 1;
+  for (let branch = 0; branch < 118; branch += 1) {
+    const y = 58 + branch * 5.25;
+    const spread = 22 + Math.pow(branch / 118, 0.72) * 155;
+    const direction = branch % 2 ? 1 : -1;
+    const jitter = ((branch * 37) % 17) - 8;
+    const endX = 192 + direction * (spread * (0.68 + (branch % 7) * 0.045)) + jitter;
+    const endY = y + 48 + (branch % 6) * 5;
+    context.strokeStyle = branchColors[(branch * 5) % branchColors.length];
+    context.lineWidth = 3.8 - branch / 118 * 1.45;
+    context.beginPath();
+    context.moveTo(192, y);
+    context.quadraticCurveTo(192 + direction * spread * 0.38, y + 9, endX, endY);
+    context.stroke();
+    for (let needle = 1; needle <= 6; needle += 1) {
+      const t = needle / 7;
+      const stemX = 192 + (endX - 192) * t;
+      const stemY = y + (endY - y) * t - Math.sin(t * Math.PI) * 8;
+      const needleLength = 12 + (branch + needle * 3) % 10;
+      context.lineWidth = 1.2;
+      context.globalAlpha = 0.68 + (needle % 3) * 0.1;
+      context.beginPath();
+      context.moveTo(stemX, stemY);
+      context.lineTo(stemX - direction * needleLength * 0.35, stemY + needleLength);
+      context.moveTo(stemX, stemY);
+      context.lineTo(stemX + direction * needleLength * 0.22, stemY + needleLength * 0.9);
+      context.stroke();
+    }
+  }
+  context.globalAlpha = 1;
+  const crown = context.createRadialGradient(192, 85, 5, 192, 120, 58);
+  crown.addColorStop(0, "rgba(66,112,81,.9)");
+  crown.addColorStop(1, "rgba(12,43,32,0)");
+  context.fillStyle = crown;
+  context.fillRect(126, 38, 132, 164);
   pineTexture = new THREE.CanvasTexture(pineCanvas);
   pineTexture.colorSpace = THREE.SRGBColorSpace;
   pineTexture.minFilter = THREE.LinearMipmapLinearFilter;
+  pineTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   return pineTexture;
+}
+
+function getCanyonRockTextures() {
+  if (canyonRockTexture && canyonRockReliefTexture) return { color: canyonRockTexture, relief: canyonRockReliefTexture };
+  const rockCanvas = document.createElement("canvas");
+  rockCanvas.width = 512;
+  rockCanvas.height = 512;
+  const context = rockCanvas.getContext("2d");
+  const gradient = context.createLinearGradient(0, 0, 0, 512);
+  gradient.addColorStop(0, "#a96143");
+  gradient.addColorStop(0.4, "#7e402f");
+  gradient.addColorStop(0.72, "#b96d48");
+  gradient.addColorStop(1, "#663226");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 512, 512);
+  for (let band = 0; band < 34; band += 1) {
+    const y = band * 15 + (band * band * 7) % 13;
+    context.strokeStyle = band % 3 === 0 ? "rgba(55,24,19,.42)" : "rgba(255,181,116,.2)";
+    context.lineWidth = 2 + band % 5;
+    context.beginPath();
+    context.moveTo(0, y);
+    context.bezierCurveTo(125, y + 13 - band % 9, 348, y - 10 + band % 7, 512, y + 5);
+    context.stroke();
+  }
+  for (let grain = 0; grain < 3600; grain += 1) {
+    const tone = 80 + (grain * 29) % 90;
+    context.fillStyle = "rgb(" + (tone + 36) + "," + Math.round(tone * 0.62) + "," + Math.round(tone * 0.46) + ")";
+    context.globalAlpha = 0.09 + (grain % 5) * 0.025;
+    context.fillRect((grain * 73) % 512, (grain * 137 + grain * grain) % 512, 1 + grain % 3, 1 + grain % 2);
+  }
+  context.globalAlpha = 1;
+  canyonRockTexture = new THREE.CanvasTexture(rockCanvas);
+  canyonRockTexture.wrapS = THREE.RepeatWrapping;
+  canyonRockTexture.wrapT = THREE.RepeatWrapping;
+  canyonRockTexture.repeat.set(1.3, 1.8);
+  canyonRockTexture.colorSpace = THREE.SRGBColorSpace;
+  canyonRockTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  canyonRockReliefTexture = canyonRockTexture.clone();
+  canyonRockReliefTexture.colorSpace = THREE.NoColorSpace;
+  canyonRockReliefTexture.needsUpdate = true;
+  return { color: canyonRockTexture, relief: canyonRockReliefTexture };
 }
 
 function createContactShadow(vehicle) {
@@ -1343,14 +1482,14 @@ function addPlayerLights(group, vehicle) {
     // The generated PBR model already contains the visible lamp housing. A
     // light source just inside the body gives it a natural glow without adding
     // a detached red box outside the car.
-    const tailGlow = new THREE.PointLight(0xff2038, 0.72, 3.2, 2.15);
-    tailGlow.position.set(side * tailOffset, lampHeight, rearZ);
+    const tailGlow = new THREE.PointLight(0xff3348, 0.3, 1.75, 2.8);
+    tailGlow.position.set(side * tailOffset, lampHeight + 0.02, rearZ - 0.03);
     group.add(tailGlow);
     group.userData.playerTailLights.push(tailGlow);
 
     const target = new THREE.Object3D();
     target.position.set(side * headlightOffset * 0.38, 0.06, frontZ - 24);
-    const headlight = new THREE.SpotLight(0xd9efff, 24, 50, Math.PI / 8, 0.78, 1.5);
+    const headlight = new THREE.SpotLight(0xd9efff, 15, 42, Math.PI / 9, 0.82, 1.65);
     headlight.position.set(side * headlightOffset, lampHeight, frontZ);
     headlight.target = target;
     group.add(headlight, target);
@@ -1378,15 +1517,158 @@ async function createPlayerVehicle(vehicle) {
 }
 
 function createCityScenery(side, index, map) {
-  return new THREE.Group();
+  const group = new THREE.Group();
+  const facade = getCityFacadeTexture();
+  const buildingMaterials = [0, 1, 2].map(function (shade) {
+    return getSceneryMaterial("city-building-" + shade, function () {
+      return new THREE.MeshStandardMaterial({
+        color: [0x68809a, 0x435a72, 0x8092a3][shade],
+        map: facade,
+        emissiveMap: facade,
+        emissive: [0x162638, 0x0d1b2b, 0x192735][shade],
+        emissiveIntensity: 0.48,
+        roughness: 0.56,
+        metalness: 0.22,
+      });
+    });
+  });
+  const roofMaterial = getSceneryMaterial("city-roof", function () { return makeMaterial(0x101820, 0.54, 0.48); });
+  const sidewalkMaterial = getSceneryMaterial("city-sidewalk", function () { return makeMaterial(0x39434b, 0.88, 0.04); });
+  const neonMaterial = getSceneryMaterial("city-neon", function () {
+    return new THREE.MeshStandardMaterial({ color: map.accent, emissive: map.accent, emissiveIntensity: 3.4, roughness: 0.25 });
+  });
+  const baseX = side * (16.6 + (index % 3) * 1.2);
+  const sidewalk = new THREE.Mesh(sceneryGeometry.cube, sidewalkMaterial);
+  sidewalk.scale.set(10.5, 0.22, 18);
+  sidewalk.position.set(side * 13.7, -0.02, 0);
+  sidewalk.receiveShadow = true;
+  group.add(sidewalk);
+
+  for (let tower = 0; tower < 3; tower += 1) {
+    const width = 4.2 + ((index * 7 + tower * 3) % 5) * 0.72;
+    const height = 8.5 + ((index * 11 + tower * 7) % 9) * 1.55;
+    const depth = 5.6 + ((index * 5 + tower * 2) % 4) * 1.25;
+    const building = new THREE.Mesh(sceneryGeometry.cube, buildingMaterials[(index + tower) % buildingMaterials.length]);
+    building.scale.set(width, height, depth);
+    building.position.set(baseX + side * (tower * 5.1), height * 0.5 - 0.1, (tower - 1) * 8.8 + ((index + tower) % 3) * 1.2);
+    building.castShadow = tower === 0;
+    building.receiveShadow = true;
+    group.add(building);
+
+    const roof = new THREE.Mesh(sceneryGeometry.cube, roofMaterial);
+    roof.scale.set(width * 0.36, 0.55 + (tower % 2) * 0.35, depth * 0.3);
+    roof.position.set(building.position.x, height + roof.scale.y * 0.5 - 0.05, building.position.z);
+    group.add(roof);
+
+    if ((index + tower) % 3 === 0) {
+      const aerial = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.07, 3.2, 8), roofMaterial);
+      aerial.position.set(building.position.x, height + 2.05, building.position.z);
+      group.add(aerial);
+    }
+  }
+
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.14, 0.08), neonMaterial);
+  sign.position.set(side * 12.6, 2.1 + (index % 3) * 0.7, -4 + (index % 4) * 2.2);
+  sign.rotation.z = side * 0.025;
+  group.add(sign);
+  return group;
 }
 
 function createCanyonScenery(side, index) {
-  return new THREE.Group();
+  const group = new THREE.Group();
+  const rockTextures = getCanyonRockTextures();
+  const rockMaterials = [0, 1, 2].map(function (shade) {
+    return getSceneryMaterial("canyon-rock-" + shade, function () {
+      return new THREE.MeshStandardMaterial({
+        color: [0x934f35, 0x6d382a, 0xb26b45][shade],
+        map: rockTextures.color,
+        bumpMap: rockTextures.relief,
+        bumpScale: 0.12,
+        roughness: 0.94,
+        metalness: 0.01,
+        flatShading: true,
+      });
+    });
+  });
+  const scrubMaterial = getSceneryMaterial("canyon-scrub", function () {
+    return new THREE.MeshStandardMaterial({ color: 0x5f6034, roughness: 1, flatShading: true });
+  });
+  const baseX = side * (16.5 + (index % 4) * 1.4);
+  for (let layer = 0; layer < 3; layer += 1) {
+    const radius = 3.8 + ((index * 5 + layer * 3) % 5) * 0.7;
+    const height = 4.4 + ((index * 9 + layer * 5) % 7) * 1.15;
+    const mesa = new THREE.Mesh(sceneryGeometry.mesa, rockMaterials[(index + layer) % rockMaterials.length]);
+    mesa.scale.set(radius, height, radius * (0.72 + layer * 0.08));
+    mesa.position.set(baseX + side * layer * 4.2, height * 0.5 - 0.18, (layer - 1) * 8.8 + (index % 3) * 1.6);
+    mesa.rotation.y = index * 0.37 + layer * 0.8;
+    mesa.castShadow = layer === 0;
+    mesa.receiveShadow = true;
+    group.add(mesa);
+  }
+  for (let rockIndex = 0; rockIndex < 4; rockIndex += 1) {
+    const rock = new THREE.Mesh(sceneryGeometry.rock, rockMaterials[(index + rockIndex + 1) % rockMaterials.length]);
+    const scale = 0.55 + ((index + rockIndex * 2) % 4) * 0.25;
+    rock.scale.set(scale * 1.25, scale * 0.74, scale);
+    rock.position.set(side * (11.2 + rockIndex * 1.1), scale * 0.58 - 0.06, -8 + rockIndex * 5.2 + (index % 2));
+    rock.rotation.set(rockIndex * 0.22, index * 0.51, rockIndex * 0.16);
+    rock.castShadow = true;
+    group.add(rock);
+  }
+  if (index % 2 === 0) {
+    const scrub = new THREE.Mesh(new THREE.DodecahedronGeometry(0.65, 0), scrubMaterial);
+    scrub.scale.set(1.55, 0.68, 1.15);
+    scrub.position.set(side * 12.1, 0.38, 7.5);
+    group.add(scrub);
+  }
+  return group;
 }
 
 function createForestScenery(side, index) {
-  return new THREE.Group();
+  const group = new THREE.Group();
+  const treeMaterial = getSceneryMaterial("forest-pine", function () {
+    return new THREE.MeshStandardMaterial({
+      map: getPineTexture(),
+      transparent: true,
+      alphaTest: 0.34,
+      side: THREE.DoubleSide,
+      roughness: 0.96,
+      metalness: 0,
+      depthWrite: true,
+    });
+  });
+  const trunkMaterial = getSceneryMaterial("forest-trunk", function () { return makeMaterial(0x4a3328, 0.98, 0); });
+  const stoneMaterial = getSceneryMaterial("forest-stone", function () {
+    return new THREE.MeshStandardMaterial({ color: 0x48534f, roughness: 1, flatShading: true });
+  });
+  for (let treeIndex = 0; treeIndex < 4; treeIndex += 1) {
+    const height = 7.4 + ((index * 7 + treeIndex * 5) % 7) * 0.92;
+    const width = height * (0.48 + ((index + treeIndex) % 3) * 0.035);
+    const tree = new THREE.Group();
+    const planeA = new THREE.Mesh(sceneryGeometry.pinePlane, treeMaterial);
+    planeA.scale.set(width, height, 1);
+    planeA.position.y = height * 0.5;
+    const planeB = planeA.clone();
+    planeB.rotation.y = Math.PI / 2;
+    const trunk = new THREE.Mesh(sceneryGeometry.trunk, trunkMaterial);
+    trunk.scale.set(1, height * 0.44, 1);
+    trunk.position.y = height * 0.22;
+    trunk.castShadow = true;
+    tree.add(planeA, planeB, trunk);
+    tree.position.set(
+      side * (12.4 + treeIndex * 2.5 + ((index + treeIndex) % 2) * 1.1),
+      -0.12,
+      -12 + treeIndex * 7.3 + ((index * 3 + treeIndex) % 3),
+    );
+    tree.rotation.y = index * 0.31 + treeIndex * 0.73;
+    group.add(tree);
+  }
+  const rock = new THREE.Mesh(sceneryGeometry.rock, stoneMaterial);
+  rock.scale.set(1.35, 0.72, 1.05);
+  rock.position.set(side * 11.35, 0.54, -4 + (index % 3) * 3.2);
+  rock.rotation.set(0.16, index * 0.61, -0.08);
+  rock.castShadow = true;
+  group.add(rock);
+  return group;
 }
 
 function buildRoad(map) {
@@ -1394,11 +1676,18 @@ function buildRoad(map) {
   roadSegments.length = 0;
   currentMapTheme = map.id;
   applyMapBackdrop(map);
+  scene.environment = createReflectionEnvironment(map);
   scene.fog = new THREE.FogExp2(map.fog, map.fogDensity);
   hemisphere.color.set(map.scenery === "canyon" ? 0xffc7a2 : map.scenery === "forest" ? 0xc9eee5 : 0xbfe8ff);
   hemisphere.groundColor.set(map.scenery === "forest" ? 0x10251f : map.scenery === "canyon" ? 0x342019 : 0x0b1320);
   sun.color.set(map.scenery === "canyon" ? 0xffb584 : map.scenery === "forest" ? 0xd9fff0 : 0xe7f6ff);
-  sun.intensity = map.scenery === "city" ? 2.05 : 3.35;
+  sun.intensity = map.scenery === "city" ? 2.35 : map.scenery === "canyon" ? 3.65 : 3.05;
+  sun.position.set(map.scenery === "canyon" ? -18 : -12, map.scenery === "city" ? 20 : 24, map.scenery === "forest" ? -8 : 10);
+  roadFill.color.set(map.scenery === "canyon" ? 0xffa777 : map.scenery === "forest" ? 0x99e2d0 : 0x78cfff);
+  roadFill.intensity = map.scenery === "city" ? 1.55 : 0.95;
+  vehicleRim.color.set(map.scenery === "city" ? 0x82dfff : map.scenery === "canyon" ? 0xff9f70 : 0xc4ffd9);
+  vehicleRim.intensity = map.scenery === "city" ? 1.45 : 1.05;
+  renderer.toneMappingExposure = map.scenery === "city" ? 1.12 : map.scenery === "canyon" ? 1.06 : 1.1;
 
   const roadMaterial = makeMaterial(
     map.road,
@@ -1406,7 +1695,9 @@ function buildRoad(map) {
     map.scenery === "city" ? 0.16 : 0.04,
   );
   roadMaterial.map = createAsphaltTexture();
-  roadMaterial.envMapIntensity = map.scenery === "city" ? 1.45 : 0.7;
+  roadMaterial.bumpMap = createAsphaltReliefTexture();
+  roadMaterial.bumpScale = map.scenery === "city" ? 0.055 : 0.085;
+  roadMaterial.envMapIntensity = map.scenery === "city" ? 1.15 : 0.52;
   const shoulderMaterial = makeMaterial(map.shoulder, 0.93, 0.02);
   shoulderMaterial.map = createTerrainTexture(map);
   shoulderMaterial.envMapIntensity = 0.42;
@@ -1414,20 +1705,20 @@ function buildRoad(map) {
     color: map.line,
     roughness: 0.45,
     emissive: map.scenery === "city" ? 0x193e53 : 0x000000,
-    emissiveIntensity: 0.72,
+    emissiveIntensity: map.scenery === "city" ? 0.36 : 0.08,
   });
   const railMaterial = makeMaterial(0xbac1c8, 0.34, 0.72);
   const postMaterial = makeMaterial(0x858d95, 0.46, 0.64);
   const reflectorMaterial = new THREE.MeshStandardMaterial({
     color: map.scenery === "city" ? 0xe9f4ff : 0xffe7aa,
     emissive: map.scenery === "city" ? 0x7bb6e8 : 0xc97c25,
-    emissiveIntensity: 2.4,
+    emissiveIntensity: map.scenery === "city" ? 1.45 : 0.72,
     roughness: 0.28,
   });
   const edgeGlowMaterial = new THREE.MeshStandardMaterial({
     color: map.accent,
     emissive: map.accent,
-    emissiveIntensity: map.scenery === "city" ? 1.8 : 0.82,
+    emissiveIntensity: map.scenery === "city" ? 0.62 : 0.28,
     roughness: 0.34,
     metalness: 0.2,
   });
@@ -1449,15 +1740,16 @@ function buildRoad(map) {
     segment.add(road);
 
     const repairMaterial = new THREE.MeshStandardMaterial({
-      color: map.scenery === "city" ? 0x0a1018 : 0x171719,
-      roughness: 0.68,
+      color: map.scenery === "city" ? 0x11171d : 0x252221,
+      roughness: 0.82,
       metalness: map.scenery === "city" ? 0.2 : 0.02,
       transparent: true,
-      opacity: 0.52,
+      opacity: 0.36,
     });
     if (index % 3 !== 1) {
-      const repair = new THREE.Mesh(new THREE.BoxGeometry(2.2 + index % 4, 0.012, 7.5 + index % 5), repairMaterial);
-      repair.position.set(index % 2 ? -3.8 : 3.2, -0.02, index % 2 ? -8 : 10);
+      const repair = new THREE.Mesh(new THREE.PlaneGeometry(2.2 + index % 4, 7.5 + index % 5), repairMaterial);
+      repair.rotation.x = -Math.PI / 2;
+      repair.position.set(index % 2 ? -3.8 : 3.2, 0.004, index % 2 ? -8 : 10);
       repair.rotation.y = (index % 3 - 1) * 0.05;
       segment.add(repair);
     }
@@ -1466,7 +1758,7 @@ function buildRoad(map) {
       [-1, 1].forEach(function (side) {
         const wetPatch = new THREE.Mesh(
           new THREE.PlaneGeometry(1.5 + index % 3, 5.6 + index % 4),
-          new THREE.MeshStandardMaterial({ color: 0x24445d, roughness: 0.12, metalness: 0.48, transparent: true, opacity: 0.2 }),
+          new THREE.MeshStandardMaterial({ color: 0x294d64, roughness: 0.18, metalness: 0.42, transparent: true, opacity: 0.13 }),
         );
         wetPatch.rotation.x = -Math.PI / 2;
         wetPatch.position.set(side * (6.2 + index % 2), 0.006, index % 4 * 5 - 9);
@@ -1491,6 +1783,14 @@ function buildRoad(map) {
       const edgeGlow = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.025, SEGMENT_LENGTH + 0.75), edgeGlowMaterial);
       edgeGlow.position.set(side * 8.82, 0.018, 0);
       segment.add(edgeGlow);
+      if (index % 2 === 0) {
+        for (let marker = -16; marker <= 16; marker += 8) {
+          const roadStud = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.035, 0.22), reflectorMaterial);
+          roadStud.position.set(side * 8.28, 0.026, marker);
+          roadStud.rotation.y = side * 0.04;
+          segment.add(roadStud);
+        }
+      }
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, SEGMENT_LENGTH + 0.8), railMaterial);
       rail.position.set(side * 9.7, 0.62, 0);
       rail.castShadow = true;
@@ -1772,7 +2072,7 @@ async function startRace() {
   if (!state.race || state.race.vehicle.id !== vehicle.id || state.screen !== "game") return;
   playerCar.position.set(0, 0.02, PLAYER_Z);
   if (playerCar.userData.headlights) {
-    const headlightPower = map.scenery === "city" ? 28 : map.scenery === "forest" ? 13 : 4;
+    const headlightPower = map.scenery === "city" ? 17 : map.scenery === "forest" ? 10 : 3;
     playerCar.userData.headlights.forEach(function (light) { light.intensity = headlightPower; });
   }
   scene.add(playerCar);
@@ -2129,7 +2429,7 @@ function updateRace(dt, time) {
     );
     playerCar.rotation.z = THREE.MathUtils.lerp(playerCar.rotation.z, -race.steer * speedRatio * 0.008, 1 - Math.pow(0.001, dt));
     if (playerCar.userData.playerTailLights) {
-      const tailIntensity = input.brake > 0 ? 3.6 : race.boostActive ? 1.15 : 0.72;
+      const tailIntensity = input.brake > 0 ? 1.45 : race.boostActive ? 0.5 : 0.3;
       playerCar.userData.playerTailLights.forEach(function (light) {
         light.intensity = THREE.MathUtils.lerp(light.intensity, tailIntensity, 1 - Math.pow(0.0004, dt));
       });
