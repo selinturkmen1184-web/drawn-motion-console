@@ -145,6 +145,7 @@ const hud = {
   gear: document.getElementById("gearLabel"),
   score: document.getElementById("scoreLabel"),
   combo: document.getElementById("comboLabel"),
+  difficulty: document.getElementById("difficultyLabel"),
   boost: document.getElementById("boostBar"),
   boostLabel: document.getElementById("boostLabel"),
 };
@@ -1087,6 +1088,10 @@ async function startRace() {
     combo: 1,
     comboTimer: 0,
     nearMisses: 0,
+    difficultyLevel: 1,
+    nextDifficultyDistance: 360,
+    cleanRun: true,
+    finishPending: false,
     impactShake: 0,
     offRoad: false,
     pages: new Set(),
@@ -1201,11 +1206,40 @@ function addScore(points, comboStep) {
   race.comboTimer = 4.2;
 }
 
+function addDifficultyTraffic(race) {
+  if (trafficCars.length >= race.map.traffic + 5) return;
+  const index = trafficCars.length;
+  const car = createTrafficVehicle(index);
+  const lane = Math.floor(Math.random() * 3);
+  car.userData.lane = lane;
+  car.userData.targetLane = lane;
+  car.userData.laneX = LANE_X[lane];
+  car.userData.speed = 42 + Math.random() * (84 + race.difficultyLevel * 5);
+  car.userData.changeTimer = 0.7 + Math.random() * 1.6;
+  car.position.set(car.userData.laneX, 0.02, -310 - index * 32 - Math.random() * 110);
+  trafficWorld.add(car);
+  trafficCars.push(car);
+}
+
+function updateDifficulty() {
+  const race = state.race;
+  if (!race || !race.cleanRun || race.difficultyLevel >= 6 || race.distance < race.nextDifficultyDistance) return;
+  race.difficultyLevel += 1;
+  race.nextDifficultyDistance += Math.max(260, 390 - race.difficultyLevel * 22);
+  addDifficultyTraffic(race);
+  addScore(350 * race.difficultyLevel, 0.2);
+  playTone(390 + race.difficultyLevel * 75, 0.22, "square", 0.032);
+  showToast("SEVİYE " + race.difficultyLevel + " · TRAFİK YOĞUNLAŞTI", false, "↑");
+}
+
 function triggerImpact(car) {
   const race = state.race;
-  race.speed *= 0.34;
-  race.elapsed += 2;
-  race.collisionCooldown = 1.2;
+  if (!race || race.finishPending || race.finished) return;
+  race.finishPending = true;
+  race.cleanRun = false;
+  race.active = false;
+  race.speed = 0;
+  race.boostActive = false;
   race.combo = 1;
   race.comboTimer = 0;
   race.impactShake = 1;
@@ -1215,17 +1249,22 @@ function triggerImpact(car) {
   window.setTimeout(function () { screens.game.classList.remove("impact"); }, 180);
   if (navigator.vibrate) navigator.vibrate(90);
   playTone(88, 0.22, "sawtooth", 0.055);
-  showToast("ÇARPIŞMA · +2 SN", true, "!");
+  showToast("ÇARPIŞMA · OYUN BİTTİ", true, "!");
+  window.setTimeout(function () {
+    if (state.race === race) finishRace("crash");
+  }, 420);
 }
 
 function recycleTraffic(car, index) {
-  car.position.z = -430 - index * 38 - Math.random() * 160;
+  const difficulty = state.race ? state.race.difficultyLevel : 1;
+  const spacing = Math.max(25, 39 - difficulty * 2.2);
+  car.position.z = -340 - index * spacing - Math.random() * (170 / Math.sqrt(difficulty));
   car.userData.lane = Math.floor(Math.random() * 3);
   car.userData.targetLane = car.userData.lane;
   car.userData.laneX = LANE_X[car.userData.lane];
   car.position.x = car.userData.laneX;
-  car.userData.speed = 55 + Math.random() * 85;
-  car.userData.changeTimer = 1.2 + Math.random() * 4;
+  car.userData.speed = 46 + Math.random() * (88 + difficulty * 6);
+  car.userData.changeTimer = (1 + Math.random() * 3.6) / (1 + (difficulty - 1) * 0.16);
   car.userData.cooldown = 0;
 }
 
@@ -1240,6 +1279,7 @@ function updateWorld(dt, time) {
   });
 
   trafficCars.forEach(function (car, index) {
+    if (race.finishPending || race.finished) return;
     const previousZ = car.position.z;
     const relative = (race.speed - car.userData.speed) * dt * WORLD_SCALE;
     car.position.z += relative;
@@ -1250,9 +1290,10 @@ function updateWorld(dt, time) {
       const direction = Math.random() > 0.5 ? 1 : -1;
       car.userData.targetLane = THREE.MathUtils.clamp(car.userData.lane + direction, 0, 2);
       car.userData.lane = car.userData.targetLane;
-      car.userData.changeTimer = 3.5 + Math.random() * 5.5;
+      car.userData.changeTimer = (3.5 + Math.random() * 5.5) / (1 + (race.difficultyLevel - 1) * 0.24);
     }
-    car.userData.laneX = THREE.MathUtils.lerp(car.userData.laneX, LANE_X[car.userData.targetLane], 1 - Math.pow(0.18, dt));
+    const laneChangeGrip = Math.max(0.09, 0.18 - (race.difficultyLevel - 1) * 0.015);
+    car.userData.laneX = THREE.MathUtils.lerp(car.userData.laneX, LANE_X[car.userData.targetLane], 1 - Math.pow(laneChangeGrip, dt));
     const curveX = roadCurveAt(car.position.z, race);
     car.position.x = car.userData.laneX + curveX;
     car.rotation.y = THREE.MathUtils.lerp(car.rotation.y, roadHeadingAt(car.position.z, race), 1 - Math.pow(0.02, dt));
@@ -1320,6 +1361,7 @@ function updateRace(dt, time) {
   race.distance += race.speed * dt * 0.36;
   race.elapsed += dt;
   race.score += race.speed * dt * 0.2 * race.combo;
+  updateDifficulty();
   race.comboTimer = Math.max(0, race.comboTimer - dt);
   if (race.comboTimer <= 0) race.combo = THREE.MathUtils.lerp(race.combo, 1, 1 - Math.pow(0.05, dt));
   race.collisionCooldown = Math.max(0, race.collisionCooldown - dt);
@@ -1342,6 +1384,11 @@ function updateRace(dt, time) {
   }
 
   updateWorld(dt, time);
+  if (race.finishPending) {
+    updateAudio(0, vehicle.maxSpeed, false);
+    updateHud();
+    return;
+  }
   if (race.distance >= race.map.distance || race.elapsed >= race.map.timeLimit) finishRace();
   updateAudio(race.speed, vehicle.maxSpeed, true, race.boostActive);
   updateHud();
@@ -1384,29 +1431,43 @@ function updateHud() {
   hud.score.textContent = Math.round(race.score).toString().padStart(6, "0");
   hud.combo.textContent = "×" + race.combo.toFixed(1);
   hud.combo.classList.toggle("hot", race.combo >= 2);
+  hud.difficulty.textContent = "SEVİYE " + race.difficultyLevel;
   hud.boost.style.width = race.boost.toFixed(1) + "%";
   hud.boostLabel.textContent = Math.round(race.boost).toString().padStart(2, "0");
 }
 
-function finishRace() {
+function finishRace(reason) {
   const race = state.race;
   if (!race || race.finished) return;
+  const crashed = reason === "crash";
   race.finished = true;
+  race.finishPending = false;
   race.active = false;
+  race.boostActive = false;
   updateAudio(0, race.vehicle.maxSpeed, false);
-  const bestKey = "tdm-best-" + race.map.id;
-  const previousBest = Number(localStorage.getItem(bestKey));
-  if (!previousBest || race.elapsed < previousBest) localStorage.setItem(bestKey, race.elapsed.toFixed(2));
+  screens.game.classList.remove("boosting", "offroad");
   const pages = race.pages.size;
   const finishedDistance = race.distance >= race.map.distance;
-  const grade = !finishedDistance ? "C" : pages === 4 ? "S" : pages >= 3 ? "A" : pages >= 2 ? "B" : "C";
+  const timedOut = !crashed && !finishedDistance;
+  if (finishedDistance && !crashed) {
+    const bestKey = "tdm-best-" + race.map.id;
+    const previousBest = Number(localStorage.getItem(bestKey));
+    if (!previousBest || race.elapsed < previousBest) localStorage.setItem(bestKey, race.elapsed.toFixed(2));
+  }
+  const grade = crashed ? "X" : !finishedDistance ? "C" : pages === 4 ? "S" : pages >= 3 ? "A" : pages >= 2 ? "B" : "C";
+  document.getElementById("resultKicker").textContent = crashed ? "RUN ENDED · COLLISION" : timedOut ? "RUN ENDED · TIME" : "ROUTE COMPLETE";
+  document.getElementById("resultTitle").innerHTML = crashed ? "TEK HATA.<br />KOŞU BİTTİ." : timedOut ? "ZAMAN<br />DOLDU." : "KOLEKSİYONA<br />YENİ BİR HİKÂYE.";
   document.getElementById("resultImage").src = race.vehicle.resultImage;
-  document.getElementById("resultGrade").textContent = grade;
+  const resultGrade = document.getElementById("resultGrade");
+  resultGrade.textContent = grade;
+  resultGrade.classList.toggle("crash", crashed);
   document.getElementById("resultTime").textContent = formatTime(race.elapsed);
   document.getElementById("resultPages").textContent = pages + " / 4";
   document.getElementById("resultSpeed").textContent = Math.round(race.maxSpeed) + " KM/H";
   document.getElementById("resultScore").textContent = Math.round(race.score).toString().padStart(6, "0");
-  document.getElementById("resultMessage").textContent = finishedDistance
+  document.getElementById("resultMessage").textContent = crashed
+    ? "Çarpışma koşuyu bitirdi. Temiz sürüşte " + race.difficultyLevel + ". seviyeye ve " + (race.distance / 1000).toFixed(1) + " kilometreye ulaştın."
+    : finishedDistance
     ? pages === 4
       ? "Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi."
       : 4 - pages + " çizim sayfası yolda kaldı. Rotayı tekrar sürerek koleksiyonu tamamlayabilirsin."

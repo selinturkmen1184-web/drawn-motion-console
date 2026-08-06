@@ -118,7 +118,7 @@
             <div class="hud-right"><button id="pauseButton" type="button">Ⅱ</button><div><small>TIME</small><b id="timeLabel">00:00.0</b></div></div>
           </div>
           <div class="speed-cluster"><b id="speedLabel">000</b><span>KM/H</span><div class="speed-bar"><i id="speedBar"></i></div><small id="gearLabel">N</small></div>
-          <div class="drive-score"><small>SKOR</small><b id="scoreLabel">000000</b><em id="comboLabel">×1.0</em></div>
+          <div class="drive-score"><small>SKOR <i id="difficultyLabel">SEVİYE 1</i></small><b id="scoreLabel">000000</b><em id="comboLabel">×1.0</em></div>
           <div class="boost-cluster"><small>BOOST</small><div><i id="boostBar"></i></div><b id="boostLabel">100</b></div>
           <div class="drive-effects" id="driveEffects" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           <div class="model-status" id="modelStatus">3B MODEL HAZIRLANIYOR</div>
@@ -133,7 +133,7 @@
 
         <section class="screen result-screen" id="resultScreen" aria-labelledby="resultTitle">
           <div class="result-art"><img id="resultImage" src="./cars/silverado-front.jpg" alt="Tamamlanan aracın koleksiyon görseli" /><div class="result-grade" id="resultGrade">A</div></div>
-          <div class="result-copy"><p class="kicker">ROUTE COMPLETE</p><h2 id="resultTitle">KOLEKSİYONA<br />YENİ BİR HİKÂYE.</h2><div class="result-stats"><div><small>SÜRE</small><b id="resultTime">00:00.0</b></div><div><small>ÇİZİM</small><b id="resultPages">4 / 4</b></div><div><small>EN YÜKSEK HIZ</small><b id="resultSpeed">210 KM/H</b></div><div><small>TOPLAM SKOR</small><b id="resultScore">000000</b></div></div><p id="resultMessage">Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi.</p><div class="result-actions"><button class="primary-button" id="replayButton" type="button"><span>TEKRAR SÜR</span><i>↻</i></button><button class="ghost-button light" id="newRouteButton" type="button">YENİ ROTA</button></div></div>
+          <div class="result-copy"><p class="kicker" id="resultKicker">ROUTE COMPLETE</p><h2 id="resultTitle">KOLEKSİYONA<br />YENİ BİR HİKÂYE.</h2><div class="result-stats"><div><small>SÜRE</small><b id="resultTime">00:00.0</b></div><div><small>ÇİZİM</small><b id="resultPages">4 / 4</b></div><div><small>EN YÜKSEK HIZ</small><b id="resultSpeed">210 KM/H</b></div><div><small>TOPLAM SKOR</small><b id="resultScore">000000</b></div></div><p id="resultMessage">Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi.</p><div class="result-actions"><button class="primary-button" id="replayButton" type="button"><span>TEKRAR SÜR</span><i>↻</i></button><button class="ghost-button light" id="newRouteButton" type="button">YENİ ROTA</button></div></div>
         </section>
       </main>
 
@@ -141,7 +141,7 @@
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="howTitle">
           <button class="modal-close" id="howClose" type="button" aria-label="Kapat">×</button>
           <p class="kicker">DRIVER MANUAL</p><h2 id="howTitle">YOLA ÇIKMADAN ÖNCE</h2>
-          <ol><li><b>01</b><span>Aracını ve üç özgün haritadan birini seç.</span></li><li><b>02</b><span>Gaz ver, virajları takip et; SHIFT veya BOOST ile kısa süre hızlan.</span></li><li><b>03</b><span>Trafiğin yanından temiz geçerek kombo yap ve dört çizim sayfasını topla.</span></li><li><b>04</b><span>Klavye, dokunmatik ekran veya bağlı gamepad ile oynayabilirsin.</span></li></ol>
+          <ol><li><b>01</b><span>Aracını ve üç özgün haritadan birini seç.</span></li><li><b>02</b><span>Gaz ver, virajları takip et; SHIFT veya BOOST ile kısa süre hızlan.</span></li><li><b>03</b><span>Tek bir çarpışma koşuyu bitirir. Temiz sürdükçe trafik yoğunlaşır ve seviye yükselir.</span></li><li><b>04</b><span>Trafiğin yanından temiz geçerek kombo yap ve dört çizim sayfasını topla.</span></li></ol>
           <button class="primary-button full" id="howStart" type="button"><span>SÜRÜCÜYÜ SEÇ</span><i>→</i></button>
         </div>
       </div>
@@ -154,6 +154,6 @@
         }
       }
     </script>
-    <script type="module" src="./game3d.js?v=pro-drive-19"></script>
+    <script type="module" src="./game3d.js?v=clean-run-20"></script>
   </body>
 </html>
