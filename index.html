@@ -119,6 +119,11 @@
             <div class="hud-center"><small id="hudMap">NEON CITY CIRCUIT · TUR 1</small><div class="track-progress"><i id="trackProgress"></i><span id="distanceLabel">0.0 KM · SURVIVAL</span></div></div>
             <div class="hud-right"><button id="cameraButton" type="button" aria-label="Kamera görünümünü değiştir">CAM 1</button><button id="pauseButton" type="button" aria-label="Oyunu duraklat">Ⅱ</button><div><small>TIME</small><b id="timeLabel">00:00.0</b></div></div>
           </div>
+          <div class="race-telemetry" aria-label="Canlı yarış bilgileri">
+            <div><small>SKOR</small><strong id="telemetryScore">000000</strong><em id="telemetryMultiplier">×1.0</em></div>
+            <div class="telemetry-speed"><small>HIZ</small><strong id="telemetrySpeed">000</strong><em>KM/H</em></div>
+            <div><small>MESAFE</small><strong id="telemetryDistance">0.00</strong><em>KM</em></div>
+          </div>
           <div class="speed-cluster"><small class="speed-caption">VELOCITY</small><b id="speedLabel">000</b><span>KM/H</span><div class="speed-bar"><i id="speedBar"></i></div><small id="gearLabel">N</small></div>
           <div class="drive-score"><small>SKOR <i id="difficultyLabel">SEVİYE 1</i></small><b id="scoreLabel">000000</b><em id="comboLabel">×1.0</em><div class="clean-progress"><span>TEMİZ SÜRÜŞ</span><i><b id="difficultyProgress"></b></i></div></div>
           <div class="boost-cluster"><small>BOOST</small><div><i id="boostBar"></i></div><b id="boostLabel">100</b></div>
@@ -136,7 +141,7 @@
 
         <section class="screen result-screen" id="resultScreen" aria-labelledby="resultTitle">
           <div class="result-art"><img id="resultImage" src="./cars/silverado-front.jpg" alt="Tamamlanan aracın koleksiyon görseli" /><div class="result-grade" id="resultGrade">A</div></div>
-          <div class="result-copy"><p class="kicker" id="resultKicker">ROUTE COMPLETE</p><h2 id="resultTitle">KOLEKSİYONA<br />YENİ BİR HİKÂYE.</h2><div class="result-stats"><div><small>SÜRE</small><b id="resultTime">00:00.0</b></div><div><small>ÇİZİM</small><b id="resultPages">4 / 4</b></div><div><small>EN YÜKSEK HIZ</small><b id="resultSpeed">210 KM/H</b></div><div><small>TOPLAM SKOR</small><b id="resultScore">000000</b></div></div><p id="resultMessage">Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi.</p><div class="result-actions"><button class="primary-button" id="replayButton" type="button"><span>TEKRAR SÜR</span><i>↻</i></button><button class="ghost-button light" id="newRouteButton" type="button">YENİ ROTA</button></div></div>
+          <div class="result-copy"><p class="kicker" id="resultKicker">ROUTE COMPLETE</p><h2 id="resultTitle">KOLEKSİYONA<br />YENİ BİR HİKÂYE.</h2><div class="result-stats"><div><small>SÜRE</small><b id="resultTime">00:00.0</b></div><div><small>MESAFE</small><b id="resultDistance">0.0 KM</b></div><div><small>EN YÜKSEK HIZ</small><b id="resultSpeed">210 KM/H</b></div><div><small>TOPLAM SKOR</small><b id="resultScore">000000</b></div></div><p id="resultMessage">Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi.</p><div class="result-actions"><button class="primary-button" id="replayButton" type="button"><span>TEKRAR SÜR</span><i>↻</i></button><button class="ghost-button light" id="newRouteButton" type="button">YENİ ROTA</button></div></div>
         </section>
       </main>
 
@@ -157,6 +162,6 @@
         }
       }
     </script>
-  <script type="module" src="./game3d.js?v=full-redesign-25"></script>
+  <script type="module" src="./game3d.js?v=telemetry-26"></script>
   </body>
 </html>

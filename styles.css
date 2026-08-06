@@ -282,6 +282,15 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .hud-right > div { min-width: 108px; height: 46px; padding: 8px 11px; text-align: right; }
 .hud-right b { display: block; margin-top: 5px; font: 600 13px/1 var(--mono); }
 
+.race-telemetry { position: absolute; z-index: 5; top: 92px; left: 50%; width: min(430px,calc(100% - 40px)); min-height: 64px; display: grid; grid-template-columns: repeat(3,1fr); transform: translateX(-50%); border: 1px solid rgba(200,225,239,.18); background: linear-gradient(135deg,rgba(7,15,24,.92),rgba(10,25,37,.7)); box-shadow: 0 18px 45px rgba(0,0,0,.25), inset 0 1px rgba(255,255,255,.04); clip-path: polygon(2% 0,98% 0,100% 16%,100% 84%,98% 100%,2% 100%,0 84%,0 16%); backdrop-filter: blur(16px); pointer-events: none; }
+.race-telemetry::before { content: ''; position: absolute; left: 25%; right: 25%; top: 0; height: 2px; background: var(--electric); box-shadow: 0 0 18px rgba(104,225,255,.6); }
+.race-telemetry > div { position: relative; min-width: 0; padding: 12px 14px 10px; text-align: center; }
+.race-telemetry > div + div { border-left: 1px solid rgba(200,225,239,.13); }
+.race-telemetry small { display: block; margin-bottom: 7px; color: #687786; font: 500 6px/1 var(--mono); letter-spacing: .2em; }
+.race-telemetry strong { color: #eef6f9; font: 700 22px/.9 var(--display); letter-spacing: .035em; }
+.race-telemetry em { margin-left: 6px; color: var(--electric); font: 600 6px/1 var(--mono); letter-spacing: .08em; font-style: normal; }
+.race-telemetry .telemetry-speed strong { color: var(--electric); text-shadow: 0 0 18px rgba(104,225,255,.2); }
+
 .speed-cluster { position: absolute; z-index: 4; right: 31px; bottom: 28px; width: 184px; height: 184px; display: grid; place-items: center; text-align: center; pointer-events: none; }
 .speed-cluster::before { content: ''; position: absolute; inset: 0; border: 1px solid rgba(205,230,242,.18); border-radius: 50%; background: radial-gradient(circle, rgba(8,17,27,.8) 0 54%, transparent 55%), conic-gradient(from 225deg, var(--electric) 0 8%, rgba(255,255,255,.12) 8% 75%, transparent 75%); clip-path: polygon(0 0,100% 0,100% 83%,83% 100%,17% 100%,0 83%); }
 .speed-cluster::after { content: ''; position: absolute; inset: 12px; border: 1px dashed rgba(104,225,255,.19); border-radius: 50%; }
@@ -390,6 +399,7 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
   .selection-actions { position: sticky; z-index: 10; bottom: 0; padding: 14px 0; background: rgba(7,11,18,.88); backdrop-filter: blur(12px); }
   .game-screen { height: 100dvh; min-height: 100dvh; }
   .game-hud { grid-template-columns: 1fr auto; left: 10px; right: 10px; top: 10px; }
+  .race-telemetry { top: 78px; width: min(410px,calc(100% - 20px)); }
   .mission, .hud-center { display: none; }
   .hud-right { grid-column: 2; }
   .speed-cluster { right: 8px; bottom: 72px; transform: scale(.72); transform-origin: right bottom; }
@@ -430,6 +440,11 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
   .hud-vehicle { width: 156px; }
   .hud-vehicle b { max-width: 84px; font-size: 8px; }
   .hud-right > div { display: none; }
+  .race-telemetry { min-height: 54px; }
+  .race-telemetry > div { padding: 10px 6px 8px; }
+  .race-telemetry small { margin-bottom: 6px; font-size: 5px; }
+  .race-telemetry strong { font-size: 18px; }
+  .race-telemetry em { display: block; margin: 4px 0 0; font-size: 5px; }
   .countdown { font-size: 130px; }
   .result-copy h2 { font-size: 58px; }
   .result-stats { grid-template-columns: 1fr; }

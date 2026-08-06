@@ -132,6 +132,10 @@ const hud = {
   distance: document.getElementById("distanceLabel"),
   time: document.getElementById("timeLabel"),
   speed: document.getElementById("speedLabel"),
+  telemetrySpeed: document.getElementById("telemetrySpeed"),
+  telemetryScore: document.getElementById("telemetryScore"),
+  telemetryMultiplier: document.getElementById("telemetryMultiplier"),
+  telemetryDistance: document.getElementById("telemetryDistance"),
   speedBar: document.getElementById("speedBar"),
   gear: document.getElementById("gearLabel"),
   score: document.getElementById("scoreLabel"),
@@ -1670,6 +1674,10 @@ function updateHud() {
   hud.time.textContent = formatTime(race.elapsed);
   hud.pageCounter.textContent = race.pages.size + " / 4";
   hud.speed.textContent = Math.round(race.speed).toString().padStart(3, "0");
+  hud.telemetrySpeed.textContent = Math.round(race.speed).toString().padStart(3, "0");
+  hud.telemetryScore.textContent = Math.round(race.score).toString().padStart(6, "0");
+  hud.telemetryMultiplier.textContent = "×" + race.combo.toFixed(1);
+  hud.telemetryDistance.textContent = (race.distance / 1000).toFixed(2);
   hud.speedBar.style.width = Math.min(100, race.speed / race.vehicle.maxSpeed * 100) + "%";
   hud.gear.textContent = race.speed < 3 ? "N" : Math.min(6, Math.max(1, Math.ceil(race.speed / 38))).toString();
   hud.score.textContent = Math.round(race.score).toString().padStart(6, "0");
@@ -1709,7 +1717,7 @@ function finishRace(reason) {
   resultGrade.textContent = grade;
   resultGrade.classList.toggle("crash", crashed);
   document.getElementById("resultTime").textContent = formatTime(race.elapsed);
-  document.getElementById("resultPages").textContent = pages + " / 4";
+  document.getElementById("resultDistance").textContent = (race.distance / 1000).toFixed(1) + " KM";
   document.getElementById("resultSpeed").textContent = Math.round(race.maxSpeed) + " KM/H";
   document.getElementById("resultScore").textContent = Math.round(race.score).toString().padStart(6, "0");
   document.getElementById("resultMessage").textContent = (newRecord ? "YENİ MESAFE REKORU · " : "")
