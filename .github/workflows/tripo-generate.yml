@@ -1,0 +1,128 @@
+name: Generate Tripo vehicle models
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out the game
+        uses: actions/checkout@v4
+
+      - name: Generate game-ready GLB models
+        env:
+          TRIPO_API_KEY: ${{ secrets.TRIPO_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          api="https://openapi.tripo3d.ai/v3"
+          auth="Authorization: Bearer ${TRIPO_API_KEY}"
+          mkdir -p models/generated
+
+          upload_image() {
+            curl --silent --show-error --fail-with-body \
+              --header "$auth" \
+              --form "file=@$1" \
+              "$api/files" | jq --exit-status --raw-output '.data.file_token'
+          }
+
+          start_model() {
+            local front_token="$1"
+            local back_token="$2"
+            jq --null-input \
+              --arg front "$front_token" \
+              --arg back "$back_token" \
+              '{
+                inputs: [{front: $front}, {back: $back}],
+                model: "v3.1-20260211",
+                texture: true,
+                pbr: true,
+                texture_alignment: "original_image",
+                orientation: "align_image",
+                face_limit: 100000,
+                texture_quality: "detailed",
+                geometry_quality: "detailed",
+                auto_size: true,
+                compress: "geometry"
+              }' | curl --silent --show-error --fail-with-body \
+                --header "$auth" \
+                --header "Content-Type: application/json" \
+                --data @- \
+                "$api/generation/multiview-to-model" | \
+              jq --exit-status --raw-output '.data.task_id'
+          }
+
+          wait_for_model() {
+            local task_id="$1"
+            local model_path="$2"
+            local preview_path="$3"
+            local metadata_path="$4"
+
+            for attempt in $(seq 1 90); do
+              response="$(curl --silent --show-error --fail-with-body \
+                --header "$auth" "$api/tasks/$task_id")"
+              status="$(jq --raw-output '.data.status' <<<"$response")"
+
+              if [[ "$status" == "success" ]]; then
+                model_url="$(jq --exit-status --raw-output '.data.output.model_url' <<<"$response")"
+                preview_url="$(jq --raw-output '.data.output.rendered_image_url // empty' <<<"$response")"
+                curl --silent --show-error --fail --location "$model_url" --output "$model_path"
+                if [[ -n "$preview_url" ]]; then
+                  curl --silent --show-error --fail --location "$preview_url" --output "$preview_path"
+                fi
+                jq '{task_id: .data.task_id, status: .data.status, credits_consumed: .data.credits_consumed, completed_at: .data.completed_at}' \
+                  <<<"$response" > "$metadata_path"
+                return 0
+              fi
+
+              if [[ "$status" == "failed" || "$status" == "cancelled" ]]; then
+                jq '.data | {task_id, status, error_code, error_message}' <<<"$response"
+                return 1
+              fi
+
+              sleep 10
+            done
+
+            echo "Timed out waiting for Tripo task $task_id" >&2
+            return 1
+          }
+
+          silverado_front="$(upload_image tripo-input/silverado-front.png)"
+          silverado_back="$(upload_image tripo-input/silverado-back.png)"
+          clk_front="$(upload_image tripo-input/clk55-front.png)"
+          clk_back="$(upload_image tripo-input/clk55-back.png)"
+
+          silverado_task="$(start_model "$silverado_front" "$silverado_back")"
+          clk_task="$(start_model "$clk_front" "$clk_back")"
+
+          wait_for_model "$silverado_task" \
+            models/generated/silverado.glb \
+            models/generated/silverado-preview.webp \
+            models/generated/silverado.json &
+          silverado_pid=$!
+
+          wait_for_model "$clk_task" \
+            models/generated/clk55.glb \
+            models/generated/clk55-preview.webp \
+            models/generated/clk55.json &
+          clk_pid=$!
+
+          wait "$silverado_pid"
+          wait "$clk_pid"
+
+      - name: Commit generated models
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models/generated
+          git commit -m "Generate Tripo vehicle models" || exit 0
+          git push
