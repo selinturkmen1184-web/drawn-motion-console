@@ -30,7 +30,7 @@
           <div class="hero-copy">
             <p class="kicker">45 CARS · 03 MAPS · 01 COLLECTION</p>
             <h1 id="heroTitle"><span>COLLECTOR'S</span><strong>RUN</strong></h1>
-            <p class="hero-text">Özel otomobil sanatını garajdan çıkar. Haritaları tamamla, kayıp çizim sayfalarını topla ve koleksiyonun hikâyesini yola taşı.</p>
+            <p class="hero-text">Özel otomobil sanatını garajdan çıkar. Sonsuz rotalarda trafiği aş, kayıp çizimleri topla ve çarpışmadan mesafe rekoru kır.</p>
             <div class="hero-actions">
               <button class="primary-button" id="startButton" type="button"><span>OYUNA BAŞLA</span><i>→</i></button>
               <button class="ghost-button" id="howButton" type="button">NASIL OYNANIR?</button>
@@ -40,6 +40,7 @@
               <span><kbd>A</kbd><kbd>D</kbd> YÖN</span>
               <span><kbd>S</kbd><kbd>↓</kbd> FREN</span>
               <span><kbd>SHIFT</kbd> BOOST</span>
+              <span><kbd>C</kbd> KAMERA</span>
               <span><kbd>ESC</kbd> DURAKLAT</span>
             </div>
           </div>
@@ -90,17 +91,17 @@
           <div class="map-grid">
             <article class="map-card selected" data-map="city" tabindex="0">
               <div class="map-visual city-map"><div class="city-skyline"></div><div class="map-road"></div><span>01</span></div>
-              <div class="map-copy"><p>NIGHT / ASPHALT</p><h3>NEON CITY<br />CIRCUIT</h3><div><span>2.4 KM</span><span>MEDIUM</span><span class="best-time" data-best="city">BEST —:—</span></div></div>
+              <div class="map-copy"><p>NIGHT / ASPHALT</p><h3>NEON CITY<br />CIRCUIT</h3><div><span>ENDLESS</span><span>MEDIUM</span><span class="best-time" data-best="city">BEST — KM</span></div></div>
               <i class="map-check">✓</i>
             </article>
             <article class="map-card" data-map="canyon" tabindex="0">
               <div class="map-visual canyon-map"><div class="canyon-sun"></div><div class="map-road"></div><span>02</span></div>
-              <div class="map-copy"><p>SUNSET / DUST</p><h3>RED ROCK<br />EXPEDITION</h3><div><span>2.8 KM</span><span>HARD</span><span class="best-time" data-best="canyon">BEST —:—</span></div></div>
+              <div class="map-copy"><p>SUNSET / DUST</p><h3>RED ROCK<br />EXPEDITION</h3><div><span>ENDLESS</span><span>HARD</span><span class="best-time" data-best="canyon">BEST — KM</span></div></div>
               <i class="map-check">✓</i>
             </article>
             <article class="map-card" data-map="forest" tabindex="0">
               <div class="map-visual forest-map"><div class="forest-pines"></div><div class="map-road"></div><span>03</span></div>
-              <div class="map-copy"><p>DAWN / MOUNTAIN</p><h3>ALPINE INK<br />RUN</h3><div><span>2.6 KM</span><span>EXPERT</span><span class="best-time" data-best="forest">BEST —:—</span></div></div>
+              <div class="map-copy"><p>DAWN / MOUNTAIN</p><h3>ALPINE INK<br />RUN</h3><div><span>ENDLESS</span><span>EXPERT</span><span class="best-time" data-best="forest">BEST — KM</span></div></div>
               <i class="map-check">✓</i>
             </article>
           </div>
@@ -114,8 +115,8 @@
               <div class="hud-vehicle"><img id="hudVehicleImage" src="./cars/silverado-front.jpg" alt="Seçili araç" /><span><small id="hudClass">ADVENTURE CLASS</small><b id="hudVehicle">OVERLAND SILVERADO</b></span></div>
               <div class="mission"><small>MISSION</small><span>KAYIP ÇİZİMLERİ TOPLA</span><b><i id="pagePips"></i><em id="pageCounter">0 / 4</em></b></div>
             </div>
-            <div class="hud-center"><small id="hudMap">NEON CITY CIRCUIT</small><div class="track-progress"><i id="trackProgress"></i><span id="distanceLabel">0.0 / 2.4 KM</span></div></div>
-            <div class="hud-right"><button id="pauseButton" type="button">Ⅱ</button><div><small>TIME</small><b id="timeLabel">00:00.0</b></div></div>
+            <div class="hud-center"><small id="hudMap">NEON CITY CIRCUIT · TUR 1</small><div class="track-progress"><i id="trackProgress"></i><span id="distanceLabel">0.0 KM · SURVIVAL</span></div></div>
+            <div class="hud-right"><button id="cameraButton" type="button" aria-label="Kamera görünümünü değiştir">CAM 1</button><button id="pauseButton" type="button" aria-label="Oyunu duraklat">Ⅱ</button><div><small>TIME</small><b id="timeLabel">00:00.0</b></div></div>
           </div>
           <div class="speed-cluster"><b id="speedLabel">000</b><span>KM/H</span><div class="speed-bar"><i id="speedBar"></i></div><small id="gearLabel">N</small></div>
           <div class="drive-score"><small>SKOR <i id="difficultyLabel">SEVİYE 1</i></small><b id="scoreLabel">000000</b><em id="comboLabel">×1.0</em><div class="clean-progress"><span>TEMİZ SÜRÜŞ</span><i><b id="difficultyProgress"></b></i></div></div>
@@ -142,7 +143,7 @@
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="howTitle">
           <button class="modal-close" id="howClose" type="button" aria-label="Kapat">×</button>
           <p class="kicker">DRIVER MANUAL</p><h2 id="howTitle">YOLA ÇIKMADAN ÖNCE</h2>
-          <ol><li><b>01</b><span>Aracını ve üç özgün haritadan birini seç.</span></li><li><b>02</b><span>Gaz ver, virajları takip et; SHIFT veya BOOST ile kısa süre hızlan.</span></li><li><b>03</b><span>Tek bir çarpışma koşuyu bitirir. Temiz sürdükçe trafik yoğunlaşır ve seviye yükselir.</span></li><li><b>04</b><span>Trafiğin yanından temiz geçerek kombo yap ve dört çizim sayfasını topla.</span></li></ol>
+          <ol><li><b>01</b><span>Aracını ve üç sonsuz survival haritasından birini seç.</span></li><li><b>02</b><span>Şerit değiştir; SHIFT ile boost kullan, C veya CAM ile kamerayı değiştir.</span></li><li><b>03</b><span>Tek bir çarpışma koşuyu bitirir. Her turda trafik yoğunlaşır ve seviye yükselir.</span></li><li><b>04</b><span>Yakın geçişlerle boost kazan, dört çizim sayfasını topla ve mesafe rekoru kır.</span></li></ol>
           <button class="primary-button full" id="howStart" type="button"><span>SÜRÜCÜYÜ SEÇ</span><i>→</i></button>
         </div>
       </div>
@@ -155,6 +156,6 @@
         }
       }
     </script>
-    <script type="module" src="./game3d.js?v=traffic-driver-22"></script>
+    <script type="module" src="./game3d.js?v=survival-camera-23"></script>
   </body>
 </html>

@@ -141,6 +141,7 @@ const hud = {
   boost: document.getElementById("boostBar"),
   boostLabel: document.getElementById("boostLabel"),
   radar: document.getElementById("trafficRadar"),
+  cameraButton: document.getElementById("cameraButton"),
 };
 
 const radarMarkers = Array.from({ length: 10 }, function () {
@@ -317,8 +318,8 @@ function formatTime(seconds) {
 
 function updateBestLabels() {
   document.querySelectorAll("[data-best]").forEach(function (element) {
-    const value = Number(localStorage.getItem("tdm-best-" + element.dataset.best));
-    element.textContent = value ? "BEST " + formatTime(value) : "BEST —:—";
+    const value = Number(localStorage.getItem("tdm-survival-best-" + element.dataset.best));
+    element.textContent = value ? "BEST " + (value / 1000).toFixed(1) + " KM" : "BEST — KM";
   });
 }
 
@@ -410,6 +411,10 @@ window.addEventListener("keydown", function (event) {
     if (state.screen === "game") event.preventDefault();
   }
   if (event.key === "Escape" && state.screen === "game") togglePause();
+  if ((event.key === "c" || event.key === "C") && state.screen === "game") {
+    event.preventDefault();
+    cycleCameraMode();
+  }
 });
 window.addEventListener("keyup", function (event) {
   if (keyMap[event.key]) state.keys[keyMap[event.key]] = false;
@@ -888,13 +893,44 @@ function addVehicleAccessories(group, vehicle) {
   return group;
 }
 
+function addPlayerLights(group, vehicle) {
+  const tailMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9f1018,
+    emissive: 0x4c0005,
+    emissiveIntensity: 1.9,
+    roughness: 0.26,
+    metalness: 0.22,
+  });
+  const lampHeight = vehicle.truck ? 1.02 : 0.72;
+  const lampWidth = vehicle.truck ? 0.14 : 0.34;
+  [-1, 1].forEach(function (side) {
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(lampWidth, vehicle.truck ? 0.34 : 0.16, 0.045),
+      tailMaterial,
+    );
+    tail.position.set(side * vehicle.targetWidth * 0.39, lampHeight, vehicle.targetLength * 0.515);
+    group.add(tail);
+
+    const target = new THREE.Object3D();
+    target.position.set(side * 0.7, 0.08, -22);
+    const headlight = new THREE.SpotLight(0xd9efff, 24, 48, Math.PI / 7, 0.72, 1.45);
+    headlight.position.set(side * vehicle.targetWidth * 0.28, lampHeight, -vehicle.targetLength * 0.44);
+    headlight.target = target;
+    group.add(headlight, target);
+    if (!group.userData.headlights) group.userData.headlights = [];
+    group.userData.headlights.push(headlight);
+  });
+  group.userData.playerTailMaterial = tailMaterial;
+  return group;
+}
+
 async function createPlayerVehicle(vehicle) {
   modelStatus.className = "model-status";
   modelStatus.textContent = "PBR 3B ARAÇ YÜKLENİYOR";
   try {
     const gltf = await warmVehicleModel(vehicle);
     const imported = normalizeImportedCar(gltf.scene, vehicle);
-    const finishedModel = addVehicleAccessories(imported, vehicle);
+    const finishedModel = addPlayerLights(addVehicleAccessories(imported, vehicle), vehicle);
     modelStatus.className = "model-status ready";
     modelStatus.textContent = "TRIPO PBR 3B MODEL · AKTİF";
     return finishedModel;
@@ -902,7 +938,7 @@ async function createPlayerVehicle(vehicle) {
     console.warn("GLB model yüklenemedi, yerel 3B yedek kullanılıyor.", error);
     modelStatus.className = "model-status warn";
     modelStatus.textContent = "3B YEDEK MODEL · GLB BEKLENİYOR";
-    return createFallbackVehicle(vehicle);
+    return addPlayerLights(createFallbackVehicle(vehicle), vehicle);
   }
 }
 
@@ -1211,6 +1247,9 @@ async function startRace() {
     combo: 1,
     comboTimer: 0,
     nearMisses: 0,
+    lap: 1,
+    nextCheckpointDistance: map.distance,
+    cameraMode: 0,
     difficultyLevel: 1,
     difficultyStartDistance: 0,
     nextDifficultyDistance: 360,
@@ -1228,6 +1267,7 @@ async function startRace() {
   hud.vehicle.textContent = vehicle.name;
   hud.vehicleClass.textContent = vehicle.className;
   hud.map.textContent = map.name;
+  hud.cameraButton.textContent = "CAM 1";
   hud.pages.innerHTML = Array.from({ length: 4 }, function (_, index) {
     return '<i class="page-pip" data-pip="' + index + '"></i>';
   }).join("");
@@ -1243,6 +1283,10 @@ async function startRace() {
   playerCar = await createPlayerVehicle(vehicle);
   if (!state.race || state.race.vehicle.id !== vehicle.id || state.screen !== "game") return;
   playerCar.position.set(0, 0.02, PLAYER_Z);
+  if (playerCar.userData.headlights) {
+    const headlightPower = map.scenery === "city" ? 28 : map.scenery === "forest" ? 13 : 4;
+    playerCar.userData.headlights.forEach(function (light) { light.intensity = headlightPower; });
+  }
   scene.add(playerCar);
   resizeRenderer();
   cancelAnimationFrame(state.raf);
@@ -1277,6 +1321,15 @@ function runCountdown() {
   }, 760);
 }
 
+function cycleCameraMode() {
+  const race = state.race;
+  if (!race || race.finished) return;
+  race.cameraMode = (race.cameraMode + 1) % 3;
+  hud.cameraButton.textContent = "CAM " + (race.cameraMode + 1);
+  const labels = ["TAKİP KAMERASI", "YAKIN KAMERA", "GENİŞ KAMERA"];
+  showToast(labels[race.cameraMode], false, "◉");
+}
+
 function togglePause() {
   const race = state.race;
   if (!race || race.finished || !race.active) return;
@@ -1287,6 +1340,7 @@ function togglePause() {
 }
 
 document.getElementById("pauseButton").addEventListener("click", togglePause);
+hud.cameraButton.addEventListener("click", cycleCameraMode);
 document.getElementById("resumeButton").addEventListener("click", togglePause);
 document.getElementById("quitButton").addEventListener("click", function () { quitRace("map"); });
 document.getElementById("replayButton").addEventListener("click", startRace);
@@ -1316,14 +1370,15 @@ function addScore(points, comboStep) {
 }
 
 function addDifficultyTraffic(race) {
-  if (trafficCars.length >= race.map.traffic + 5) return;
+  if (trafficCars.length >= race.map.traffic + 9) return;
   const index = trafficCars.length;
   const car = createTrafficVehicle(index);
   const lane = Math.floor(Math.random() * 3);
   car.userData.lane = lane;
   car.userData.targetLane = lane;
   car.userData.laneX = LANE_X[lane];
-  car.userData.speed = 42 + Math.random() * (84 + race.difficultyLevel * 5);
+  const pressure = Math.min(race.difficultyLevel, 14);
+  car.userData.speed = 42 + Math.random() * (84 + pressure * 5);
   car.userData.cruiseSpeed = car.userData.speed;
   car.userData.changeTimer = 0.7 + Math.random() * 1.6;
   car.position.set(car.userData.laneX, 0.02, -310 - index * 32 - Math.random() * 110);
@@ -1333,7 +1388,7 @@ function addDifficultyTraffic(race) {
 
 function updateDifficulty() {
   const race = state.race;
-  if (!race || !race.cleanRun || race.difficultyLevel >= 6 || race.distance < race.nextDifficultyDistance) return;
+  if (!race || !race.cleanRun || race.difficultyLevel >= 30 || race.distance < race.nextDifficultyDistance) return;
   race.difficultyLevel += 1;
   race.difficultyStartDistance = race.nextDifficultyDistance;
   race.nextDifficultyDistance += Math.max(260, 390 - race.difficultyLevel * 22);
@@ -1341,6 +1396,24 @@ function updateDifficulty() {
   addScore(350 * race.difficultyLevel, 0.2);
   playTone(390 + race.difficultyLevel * 75, 0.22, "square", 0.032);
   showToast("SEVİYE " + race.difficultyLevel + " · TRAFİK YOĞUNLAŞTI", false, "↑");
+}
+
+function updateCheckpoint() {
+  const race = state.race;
+  if (!race || race.distance < race.nextCheckpointDistance) return;
+  race.lap += 1;
+  race.nextCheckpointDistance += race.map.distance;
+  race.boost = Math.min(100, race.boost + 28);
+  addScore(1200 + race.lap * 240, 0.35);
+  addDifficultyTraffic(race);
+  trafficCars.forEach(function (car) {
+    car.userData.cruiseSpeed = Math.max(38, car.userData.cruiseSpeed - Math.min(7, 1.5 + race.lap * 0.35));
+  });
+  collectibleCards.forEach(function (card) {
+    if (!card.userData.collected) card.userData.distance += race.map.distance;
+  });
+  playTone(510 + Math.min(8, race.lap) * 45, 0.28, "square", 0.04);
+  showToast("TUR " + race.lap + " · SURVIVAL DEVAM EDİYOR", false, "◆");
 }
 
 function triggerImpact(car) {
@@ -1367,7 +1440,7 @@ function triggerImpact(car) {
 }
 
 function recycleTraffic(car, index) {
-  const difficulty = state.race ? state.race.difficultyLevel : 1;
+  const difficulty = state.race ? Math.min(state.race.difficultyLevel, 14) : 1;
   const spacing = Math.max(25, 39 - difficulty * 2.2);
   car.position.z = -340 - index * spacing - Math.random() * (170 / Math.sqrt(difficulty));
   car.userData.lane = Math.floor(Math.random() * 3);
@@ -1427,9 +1500,11 @@ function updateWorld(dt, time) {
         car.userData.targetLane = openLane;
         car.userData.lane = openLane;
       }
-      car.userData.changeTimer = (3.5 + Math.random() * 5.5) / (1 + (race.difficultyLevel - 1) * 0.24);
+      const lanePressure = Math.min(race.difficultyLevel, 14);
+      car.userData.changeTimer = (3.5 + Math.random() * 5.5) / (1 + (lanePressure - 1) * 0.24);
     }
-    const laneChangeGrip = Math.max(0.09, 0.18 - (race.difficultyLevel - 1) * 0.015);
+    const lanePressure = Math.min(race.difficultyLevel, 14);
+    const laneChangeGrip = Math.max(0.09, 0.18 - (lanePressure - 1) * 0.015);
     const laneTurn = LANE_X[car.userData.targetLane] - car.userData.laneX;
     car.userData.laneX = THREE.MathUtils.lerp(car.userData.laneX, LANE_X[car.userData.targetLane], 1 - Math.pow(laneChangeGrip, dt));
     car.position.x = car.userData.laneX;
@@ -1444,9 +1519,10 @@ function updateWorld(dt, time) {
       triggerImpact(car);
     } else if (previousZ <= PLAYER_Z && car.position.z > PLAYER_Z && lateralDistance >= 2 && lateralDistance < 3.65) {
       race.nearMisses += 1;
+      race.boost = Math.min(100, race.boost + 14);
       addScore(420, 0.35);
       playTone(620 + Math.min(4, race.combo) * 80, 0.11, "square", 0.025);
-      showToast("YAKIN GEÇİŞ · +" + Math.round(420 * race.combo), false, "×");
+      showToast("YAKIN GEÇİŞ · BOOST +14", false, "×");
     }
   });
 
@@ -1499,6 +1575,7 @@ function updateRace(dt, time) {
   race.elapsed += dt;
   race.score += race.speed * dt * 0.2 * race.combo;
   updateDifficulty();
+  updateCheckpoint();
   race.comboTimer = Math.max(0, race.comboTimer - dt);
   if (race.comboTimer <= 0) race.combo = THREE.MathUtils.lerp(race.combo, 1, 1 - Math.pow(0.05, dt));
   race.collisionCooldown = Math.max(0, race.collisionCooldown - dt);
@@ -1518,6 +1595,9 @@ function updateRace(dt, time) {
       1 - Math.pow(0.001, dt),
     );
     playerCar.rotation.z = THREE.MathUtils.lerp(playerCar.rotation.z, -race.steer * speedRatio * 0.035, 1 - Math.pow(0.001, dt));
+    if (playerCar.userData.playerTailMaterial) {
+      playerCar.userData.playerTailMaterial.emissiveIntensity = input.brake > 0 ? 5.6 : race.boostActive ? 2.8 : 1.9;
+    }
   }
 
   updateWorld(dt, time);
@@ -1526,7 +1606,6 @@ function updateRace(dt, time) {
     updateHud();
     return;
   }
-  if (race.distance >= race.map.distance || race.elapsed >= race.map.timeLimit) finishRace();
   updateAudio(race.speed, vehicle.maxSpeed, true, race.boostActive);
   updateHud();
 }
@@ -1557,9 +1636,11 @@ function collectPage(index) {
 function updateHud() {
   const race = state.race;
   if (!race) return;
-  const progress = Math.min(100, race.distance / race.map.distance * 100);
+  const lapDistance = race.distance % race.map.distance;
+  const progress = Math.min(100, lapDistance / race.map.distance * 100);
   hud.progress.style.width = progress + "%";
-  hud.distance.textContent = (race.distance / 1000).toFixed(1) + " / " + (race.map.distance / 1000).toFixed(1) + " KM";
+  hud.map.textContent = race.map.name + " · TUR " + race.lap;
+  hud.distance.textContent = (race.distance / 1000).toFixed(1) + " KM · SONRAKİ TUR " + Math.max(0, (race.nextCheckpointDistance - race.distance) / 1000).toFixed(1) + " KM";
   hud.time.textContent = formatTime(race.elapsed);
   hud.pageCounter.textContent = race.pages.size + " / 4";
   hud.speed.textContent = Math.round(race.speed).toString().padStart(3, "0");
@@ -1570,7 +1651,7 @@ function updateHud() {
   hud.combo.classList.toggle("hot", race.combo >= 2);
   hud.difficulty.textContent = "SEVİYE " + race.difficultyLevel;
   const difficultySpan = Math.max(1, race.nextDifficultyDistance - race.difficultyStartDistance);
-  const difficultyProgress = race.difficultyLevel >= 6
+  const difficultyProgress = race.difficultyLevel >= 30
     ? 100
     : THREE.MathUtils.clamp((race.distance - race.difficultyStartDistance) / difficultySpan * 100, 0, 100);
   hud.difficultyProgress.style.width = difficultyProgress.toFixed(1) + "%";
@@ -1590,16 +1671,13 @@ function finishRace(reason) {
   updateAudio(0, race.vehicle.maxSpeed, false);
   screens.game.classList.remove("boosting", "offroad");
   const pages = race.pages.size;
-  const finishedDistance = race.distance >= race.map.distance;
-  const timedOut = !crashed && !finishedDistance;
-  if (finishedDistance && !crashed) {
-    const bestKey = "tdm-best-" + race.map.id;
-    const previousBest = Number(localStorage.getItem(bestKey));
-    if (!previousBest || race.elapsed < previousBest) localStorage.setItem(bestKey, race.elapsed.toFixed(2));
-  }
-  const grade = crashed ? "X" : !finishedDistance ? "C" : pages === 4 ? "S" : pages >= 3 ? "A" : pages >= 2 ? "B" : "C";
-  document.getElementById("resultKicker").textContent = crashed ? "RUN ENDED · COLLISION" : timedOut ? "RUN ENDED · TIME" : "ROUTE COMPLETE";
-  document.getElementById("resultTitle").innerHTML = crashed ? "TEK HATA.<br />KOŞU BİTTİ." : timedOut ? "ZAMAN<br />DOLDU." : "KOLEKSİYONA<br />YENİ BİR HİKÂYE.";
+  const bestKey = "tdm-survival-best-" + race.map.id;
+  const previousBest = Number(localStorage.getItem(bestKey));
+  const newRecord = !previousBest || race.distance > previousBest;
+  if (newRecord) localStorage.setItem(bestKey, race.distance.toFixed(1));
+  const grade = crashed ? "X" : pages === 4 ? "S" : pages >= 3 ? "A" : pages >= 2 ? "B" : "C";
+  document.getElementById("resultKicker").textContent = crashed ? "SURVIVAL ENDED · COLLISION" : "SURVIVAL COMPLETE";
+  document.getElementById("resultTitle").innerHTML = crashed ? "TEK HATA.<br />KOŞU BİTTİ." : "YENİ BİR<br />MESAFE REKORU.";
   document.getElementById("resultImage").src = race.vehicle.resultImage;
   const resultGrade = document.getElementById("resultGrade");
   resultGrade.textContent = grade;
@@ -1608,13 +1686,9 @@ function finishRace(reason) {
   document.getElementById("resultPages").textContent = pages + " / 4";
   document.getElementById("resultSpeed").textContent = Math.round(race.maxSpeed) + " KM/H";
   document.getElementById("resultScore").textContent = Math.round(race.score).toString().padStart(6, "0");
-  document.getElementById("resultMessage").textContent = crashed
-    ? "Çarpışma koşuyu bitirdi. Temiz sürüşte " + race.difficultyLevel + ". seviyeye ve " + (race.distance / 1000).toFixed(1) + " kilometreye ulaştın."
-    : finishedDistance
-    ? pages === 4
-      ? "Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi."
-      : 4 - pages + " çizim sayfası yolda kaldı. Rotayı tekrar sürerek koleksiyonu tamamlayabilirsin."
-    : "Süre doldu. Trafiği daha temiz geçerek ve hızını koruyarak tekrar dene.";
+  document.getElementById("resultMessage").textContent = (newRecord ? "YENİ MESAFE REKORU · " : "")
+    + "Tur " + race.lap + ", seviye " + race.difficultyLevel + " ve " + (race.distance / 1000).toFixed(1)
+    + " kilometre. " + (pages === 4 ? "Tüm kayıp çizimler bulundu." : (4 - pages) + " çizim sayfası yolda kaldı.");
   window.setTimeout(function () { showScreen("result"); }, 500);
 }
 
@@ -1622,15 +1696,22 @@ function renderScene(time) {
   const race = state.race;
   if (!race) return;
   const speedRatio = THREE.MathUtils.clamp(race.speed / race.vehicle.maxSpeed, 0, 1.2);
-  const targetCameraX = race.playerX * 0.72;
+  const cameraModes = [
+    { follow: 0.72, y: 3.35, z: 14.2, fov: 56, look: 0.34, lookY: 0.75, lookZ: -10.5 },
+    { follow: 0.84, y: 2.72, z: 10.7, fov: 53, look: 0.42, lookY: 0.82, lookZ: -12.8 },
+    { follow: 0.58, y: 4.35, z: 17.4, fov: 64, look: 0.26, lookY: 0.68, lookZ: -9.2 },
+  ];
+  const view = cameraModes[race.cameraMode] || cameraModes[0];
+  const targetCameraX = race.playerX * view.follow;
   const shake = race.impactShake;
   camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCameraX, 0.075) + Math.sin(time * 71) * shake * 0.16;
-  camera.position.y = 3.35 + speedRatio * 0.34 + Math.sin(time * (race.offRoad ? 48 : 28)) * (speedRatio * 0.014 + (race.offRoad ? 0.035 : 0)) + Math.cos(time * 63) * shake * 0.1;
-  camera.position.z = 14.2 - speedRatio * 0.72 - (race.boostActive ? 0.38 : 0);
-  const targetFov = 56 + speedRatio * 6.5 + (race.boostActive ? 4.5 : 0);
+  const cameraRumble = Math.sin(time * (race.offRoad ? 48 : 28)) * (speedRatio * 0.014 + (race.offRoad ? 0.035 : 0));
+  camera.position.y = THREE.MathUtils.lerp(camera.position.y, view.y + speedRatio * 0.34, 0.075) + cameraRumble + Math.cos(time * 63) * shake * 0.1;
+  camera.position.z = THREE.MathUtils.lerp(camera.position.z, view.z - speedRatio * 0.72 - (race.boostActive ? 0.38 : 0), 0.075);
+  const targetFov = view.fov + speedRatio * 6.5 + (race.boostActive ? 4.5 : 0);
   camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.07);
   camera.updateProjectionMatrix();
-  camera.lookAt(race.playerX * 0.34, 0.75, -10.5 - speedRatio * 3.6);
+  camera.lookAt(race.playerX * view.look, view.lookY, view.lookZ - speedRatio * 3.6);
   camera.rotation.z -= race.steer * speedRatio * 0.012;
   renderer.render(scene, camera);
 }
