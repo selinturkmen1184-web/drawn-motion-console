@@ -894,33 +894,34 @@ function addVehicleAccessories(group, vehicle) {
 }
 
 function addPlayerLights(group, vehicle) {
-  const tailMaterial = new THREE.MeshStandardMaterial({
-    color: 0x9f1018,
-    emissive: 0x4c0005,
-    emissiveIntensity: 1.9,
-    roughness: 0.26,
-    metalness: 0.22,
-  });
-  const lampHeight = vehicle.truck ? 1.02 : 0.72;
-  const lampWidth = vehicle.truck ? 0.14 : 0.34;
+  group.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(group);
+  const size = bounds.getSize(new THREE.Vector3());
+  const lampHeight = bounds.min.y + size.y * (vehicle.truck ? 0.39 : 0.34);
+  const frontZ = bounds.min.z + size.z * 0.035;
+  const rearZ = bounds.max.z - size.z * 0.035;
+  const headlightOffset = Math.min(vehicle.targetWidth * 0.3, size.x * 0.29);
+  const tailOffset = Math.min(vehicle.targetWidth * 0.34, size.x * 0.32);
+  group.userData.playerTailLights = [];
+  group.userData.headlights = [];
+
   [-1, 1].forEach(function (side) {
-    const tail = new THREE.Mesh(
-      new THREE.BoxGeometry(lampWidth, vehicle.truck ? 0.34 : 0.16, 0.045),
-      tailMaterial,
-    );
-    tail.position.set(side * vehicle.targetWidth * 0.39, lampHeight, vehicle.targetLength * 0.515);
-    group.add(tail);
+    // The generated PBR model already contains the visible lamp housing. A
+    // light source just inside the body gives it a natural glow without adding
+    // a detached red box outside the car.
+    const tailGlow = new THREE.PointLight(0xff2038, 0.72, 3.2, 2.15);
+    tailGlow.position.set(side * tailOffset, lampHeight, rearZ);
+    group.add(tailGlow);
+    group.userData.playerTailLights.push(tailGlow);
 
     const target = new THREE.Object3D();
-    target.position.set(side * 0.7, 0.08, -22);
-    const headlight = new THREE.SpotLight(0xd9efff, 24, 48, Math.PI / 7, 0.72, 1.45);
-    headlight.position.set(side * vehicle.targetWidth * 0.28, lampHeight, -vehicle.targetLength * 0.44);
+    target.position.set(side * headlightOffset * 0.38, 0.06, frontZ - 24);
+    const headlight = new THREE.SpotLight(0xd9efff, 24, 50, Math.PI / 8, 0.78, 1.5);
+    headlight.position.set(side * headlightOffset, lampHeight, frontZ);
     headlight.target = target;
     group.add(headlight, target);
-    if (!group.userData.headlights) group.userData.headlights = [];
     group.userData.headlights.push(headlight);
   });
-  group.userData.playerTailMaterial = tailMaterial;
   return group;
 }
 
@@ -1595,8 +1596,11 @@ function updateRace(dt, time) {
       1 - Math.pow(0.001, dt),
     );
     playerCar.rotation.z = THREE.MathUtils.lerp(playerCar.rotation.z, -race.steer * speedRatio * 0.035, 1 - Math.pow(0.001, dt));
-    if (playerCar.userData.playerTailMaterial) {
-      playerCar.userData.playerTailMaterial.emissiveIntensity = input.brake > 0 ? 5.6 : race.boostActive ? 2.8 : 1.9;
+    if (playerCar.userData.playerTailLights) {
+      const tailIntensity = input.brake > 0 ? 3.6 : race.boostActive ? 1.15 : 0.72;
+      playerCar.userData.playerTailLights.forEach(function (light) {
+        light.intensity = THREE.MathUtils.lerp(light.intensity, tailIntensity, 1 - Math.pow(0.0004, dt));
+      });
     }
   }
 
