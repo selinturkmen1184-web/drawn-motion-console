@@ -67,6 +67,9 @@ const maps = {
     accent: 0xff4c28,
     traffic: 11,
     scenery: "city",
+    curveAmplitude: 4.2,
+    curveFrequency: 0.0042,
+    curvePhase: 0.4,
   },
   canyon: {
     id: "canyon",
@@ -84,6 +87,9 @@ const maps = {
     accent: 0xf2c451,
     traffic: 7,
     scenery: "canyon",
+    curveAmplitude: 6.8,
+    curveFrequency: 0.0036,
+    curvePhase: 1.7,
   },
   forest: {
     id: "forest",
@@ -101,6 +107,9 @@ const maps = {
     accent: 0xd4ff43,
     traffic: 8,
     scenery: "forest",
+    curveAmplitude: 5.4,
+    curveFrequency: 0.0048,
+    curvePhase: 2.5,
   },
 };
 
@@ -119,6 +128,7 @@ const collectToast = document.getElementById("collectToast");
 const howModal = document.getElementById("howModal");
 const gamepadStatus = document.getElementById("gamepadStatus");
 const modelStatus = document.getElementById("modelStatus");
+const driveEffects = document.getElementById("driveEffects");
 
 const hud = {
   vehicleImage: document.getElementById("hudVehicleImage"),
@@ -133,6 +143,10 @@ const hud = {
   speed: document.getElementById("speedLabel"),
   speedBar: document.getElementById("speedBar"),
   gear: document.getElementById("gearLabel"),
+  score: document.getElementById("scoreLabel"),
+  combo: document.getElementById("comboLabel"),
+  boost: document.getElementById("boostBar"),
+  boostLabel: document.getElementById("boostLabel"),
 };
 
 const state = {
@@ -140,7 +154,7 @@ const state = {
   vehicle: "silverado",
   map: "city",
   sound: true,
-  keys: { left: false, right: false, gas: false, brake: false },
+  keys: { left: false, right: false, gas: false, brake: false, boost: false },
   race: null,
   raf: 0,
   gamepadPauseHeld: false,
@@ -149,6 +163,10 @@ const state = {
 let audioContext = null;
 let engineOscillator = null;
 let engineGain = null;
+let engineBassOscillator = null;
+let engineBassGain = null;
+let windSource = null;
+let windGain = null;
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -236,13 +254,57 @@ function initAudio() {
   engineGain.gain.value = 0;
   engineOscillator.connect(engineGain).connect(audioContext.destination);
   engineOscillator.start();
+
+  engineBassOscillator = audioContext.createOscillator();
+  engineBassGain = audioContext.createGain();
+  engineBassOscillator.type = "triangle";
+  engineBassOscillator.frequency.value = 29;
+  engineBassGain.gain.value = 0;
+  engineBassOscillator.connect(engineBassGain).connect(audioContext.destination);
+  engineBassOscillator.start();
+
+  const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 2, audioContext.sampleRate);
+  const noiseData = noiseBuffer.getChannelData(0);
+  for (let index = 0; index < noiseData.length; index += 1) noiseData[index] = Math.random() * 2 - 1;
+  windSource = audioContext.createBufferSource();
+  windGain = audioContext.createGain();
+  const windFilter = audioContext.createBiquadFilter();
+  windSource.buffer = noiseBuffer;
+  windSource.loop = true;
+  windFilter.type = "bandpass";
+  windFilter.frequency.value = 980;
+  windFilter.Q.value = 0.55;
+  windGain.gain.value = 0;
+  windSource.connect(windFilter).connect(windGain).connect(audioContext.destination);
+  windSource.start();
 }
 
-function updateAudio(speed, maxSpeed, active) {
+function updateAudio(speed, maxSpeed, active, boosting) {
   if (!engineOscillator || !engineGain || !audioContext) return;
   const ratio = THREE.MathUtils.clamp(speed / maxSpeed, 0, 1);
-  engineOscillator.frequency.setTargetAtTime(55 + ratio * 125, audioContext.currentTime, 0.05);
-  engineGain.gain.setTargetAtTime(state.sound && active ? 0.012 + ratio * 0.026 : 0, audioContext.currentTime, 0.08);
+  const now = audioContext.currentTime;
+  engineOscillator.frequency.setTargetAtTime(55 + ratio * 138 + (boosting ? 18 : 0), now, 0.05);
+  engineGain.gain.setTargetAtTime(state.sound && active ? 0.012 + ratio * 0.027 : 0, now, 0.08);
+  if (engineBassOscillator && engineBassGain) {
+    engineBassOscillator.frequency.setTargetAtTime(28 + ratio * 48, now, 0.06);
+    engineBassGain.gain.setTargetAtTime(state.sound && active ? 0.018 + ratio * 0.018 : 0, now, 0.1);
+  }
+  if (windGain) windGain.gain.setTargetAtTime(state.sound && active ? Math.max(0, ratio - 0.28) * 0.025 : 0, now, 0.14);
+}
+
+function playTone(frequency, duration, type, volume) {
+  if (!state.sound || !audioContext) return;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const now = audioContext.currentTime;
+  oscillator.type = type || "sine";
+  oscillator.frequency.setValueAtTime(frequency, now);
+  oscillator.frequency.exponentialRampToValueAtTime(Math.max(30, frequency * 1.45), now + duration);
+  gain.gain.setValueAtTime(volume || 0.035, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  oscillator.connect(gain).connect(audioContext.destination);
+  oscillator.start(now);
+  oscillator.stop(now + duration + 0.02);
 }
 
 function formatTime(seconds) {
@@ -316,6 +378,8 @@ document.getElementById("soundButton").addEventListener("click", function (event
   if (state.sound) initAudio();
   if (!state.sound && engineGain && audioContext) {
     engineGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
+    if (engineBassGain) engineBassGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
+    if (windGain) windGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
   }
 });
 
@@ -337,6 +401,7 @@ const keyMap = {
   ArrowRight: "right", d: "right", D: "right",
   ArrowUp: "gas", w: "gas", W: "gas",
   ArrowDown: "brake", s: "brake", S: "brake",
+  Shift: "boost", " ": "boost",
 };
 
 window.addEventListener("keydown", function (event) {
@@ -370,6 +435,7 @@ function readControls() {
   let steer = (state.keys.right ? 1 : 0) - (state.keys.left ? 1 : 0);
   let gas = state.keys.gas ? 1 : 0;
   let brake = state.keys.brake ? 1 : 0;
+  let boost = state.keys.boost ? 1 : 0;
   const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
   const pad = pads[0];
   if (pad) {
@@ -377,11 +443,12 @@ function readControls() {
     steer = Math.abs(axis) > Math.abs(steer) ? axis : steer;
     gas = Math.max(gas, pad.buttons[7] ? pad.buttons[7].value : (pad.buttons[0] && pad.buttons[0].pressed ? 1 : 0));
     brake = Math.max(brake, pad.buttons[6] ? pad.buttons[6].value : (pad.buttons[1] && pad.buttons[1].pressed ? 1 : 0));
+    boost = Math.max(boost, pad.buttons[4] && pad.buttons[4].pressed ? 1 : 0, pad.buttons[5] && pad.buttons[5].pressed ? 1 : 0);
     const pausePressed = Boolean(pad.buttons[9] && pad.buttons[9].pressed);
     if (pausePressed && !state.gamepadPauseHeld && state.screen === "game") togglePause();
     state.gamepadPauseHeld = pausePressed;
   }
-  return { steer, gas, brake };
+  return { steer, gas, brake, boost };
 }
 
 function makeMaterial(color, roughness, metalness) {
@@ -934,6 +1001,9 @@ function createTrafficVehicle(index) {
   car.scale.setScalar(scale);
   car.userData.speed = 58 + (index * 17) % 74;
   car.userData.lane = index % 3;
+  car.userData.targetLane = index % 3;
+  car.userData.laneX = LANE_X[index % 3];
+  car.userData.changeTimer = 1.5 + (index % 4) * 0.8;
   car.userData.cooldown = 0;
   return car;
 }
@@ -943,7 +1013,7 @@ function buildTraffic(map) {
   trafficCars.length = 0;
   for (let index = 0; index < map.traffic; index += 1) {
     const car = createTrafficVehicle(index);
-    car.position.set(LANE_X[index % 3], 0.02, -55 - index * 56 - (index % 3) * 19);
+    car.position.set(car.userData.laneX, 0.02, -55 - index * 56 - (index % 3) * 19);
     trafficWorld.add(car);
     trafficCars.push(car);
   }
@@ -976,7 +1046,8 @@ function buildCollectibles(map) {
     group.userData.distance = distance;
     group.userData.index = index;
     group.userData.collected = false;
-    group.position.x = LANE_X[map.pageLanes[index] + 1];
+    group.userData.laneX = LANE_X[map.pageLanes[index] + 1];
+    group.position.x = group.userData.laneX;
     collectibleWorld.add(group);
     collectibleCards.push(group);
   });
@@ -1009,6 +1080,15 @@ async function startRace() {
     playerX: 0,
     steer: 0,
     maxSpeed: 0,
+    boost: 100,
+    boostActive: false,
+    boostWasActive: false,
+    score: 0,
+    combo: 1,
+    comboTimer: 0,
+    nearMisses: 0,
+    impactShake: 0,
+    offRoad: false,
     pages: new Set(),
     lastTime: performance.now(),
     vehicle,
@@ -1024,6 +1104,7 @@ async function startRace() {
   }).join("");
   updateHud();
   showScreen("game");
+  screens.game.classList.remove("boosting", "impact", "offroad");
   pausePanel.classList.remove("show");
   if (currentMapTheme !== map.id) buildRoad(map);
   buildTraffic(map);
@@ -1073,7 +1154,7 @@ function togglePause() {
   race.paused = !race.paused;
   pausePanel.classList.toggle("show", race.paused);
   race.lastTime = performance.now();
-  updateAudio(race.speed, race.vehicle.maxSpeed, !race.paused);
+  updateAudio(race.speed, race.vehicle.maxSpeed, !race.paused, race.boostActive);
 }
 
 document.getElementById("pauseButton").addEventListener("click", togglePause);
@@ -1084,19 +1165,67 @@ document.getElementById("newRouteButton").addEventListener("click", function () 
   updateBestLabels();
   showScreen("map");
 });
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden && state.screen === "game" && state.race && state.race.active && !state.race.paused) togglePause();
+});
 
 function quitRace(target) {
   if (state.race) state.race.active = false;
   cancelAnimationFrame(state.raf);
   updateAudio(0, 1, false);
+  screens.game.classList.remove("boosting", "impact", "offroad");
   pausePanel.classList.remove("show");
   showScreen(target);
 }
 
+function roadCurveAt(z, race) {
+  const map = race.map;
+  const distanceAhead = (PLAYER_Z - z) / WORLD_SCALE;
+  const currentPhase = race.distance * map.curveFrequency + map.curvePhase;
+  const aheadPhase = (race.distance + distanceAhead) * map.curveFrequency + map.curvePhase;
+  return map.curveAmplitude * (Math.sin(aheadPhase) - Math.sin(currentPhase));
+}
+
+function roadHeadingAt(z, race) {
+  const sample = 7;
+  const near = roadCurveAt(z + sample, race);
+  const far = roadCurveAt(z - sample, race);
+  return Math.atan2(far - near, sample * 2);
+}
+
+function addScore(points, comboStep) {
+  const race = state.race;
+  if (!race) return;
+  race.score += Math.round(points * race.combo);
+  if (comboStep) race.combo = Math.min(5, race.combo + comboStep);
+  race.comboTimer = 4.2;
+}
+
+function triggerImpact(car) {
+  const race = state.race;
+  race.speed *= 0.34;
+  race.elapsed += 2;
+  race.collisionCooldown = 1.2;
+  race.combo = 1;
+  race.comboTimer = 0;
+  race.impactShake = 1;
+  car.userData.cooldown = 1.2;
+  car.userData.laneX += car.position.x <= race.playerX ? -1.2 : 1.2;
+  screens.game.classList.add("impact");
+  window.setTimeout(function () { screens.game.classList.remove("impact"); }, 180);
+  if (navigator.vibrate) navigator.vibrate(90);
+  playTone(88, 0.22, "sawtooth", 0.055);
+  showToast("ÇARPIŞMA · +2 SN", true, "!");
+}
+
 function recycleTraffic(car, index) {
   car.position.z = -430 - index * 38 - Math.random() * 160;
-  car.position.x = LANE_X[Math.floor(Math.random() * 3)];
+  car.userData.lane = Math.floor(Math.random() * 3);
+  car.userData.targetLane = car.userData.lane;
+  car.userData.laneX = LANE_X[car.userData.lane];
+  car.position.x = car.userData.laneX;
   car.userData.speed = 55 + Math.random() * 85;
+  car.userData.changeTimer = 1.2 + Math.random() * 4;
   car.userData.cooldown = 0;
 }
 
@@ -1106,25 +1235,40 @@ function updateWorld(dt, time) {
   roadSegments.forEach(function (segment) {
     segment.position.z += travel;
     if (segment.position.z > 37) segment.position.z -= SEGMENT_LENGTH * SEGMENT_COUNT;
+    segment.position.x = roadCurveAt(segment.position.z, race);
+    segment.rotation.y = roadHeadingAt(segment.position.z, race);
   });
 
   trafficCars.forEach(function (car, index) {
+    const previousZ = car.position.z;
     const relative = (race.speed - car.userData.speed) * dt * WORLD_SCALE;
     car.position.z += relative;
     car.userData.cooldown = Math.max(0, car.userData.cooldown - dt);
+    car.userData.changeTimer -= dt;
     if (car.position.z > 24 || car.position.z < -760) recycleTraffic(car, index);
+    if (car.userData.changeTimer <= 0 && car.position.z < -42) {
+      const direction = Math.random() > 0.5 ? 1 : -1;
+      car.userData.targetLane = THREE.MathUtils.clamp(car.userData.lane + direction, 0, 2);
+      car.userData.lane = car.userData.targetLane;
+      car.userData.changeTimer = 3.5 + Math.random() * 5.5;
+    }
+    car.userData.laneX = THREE.MathUtils.lerp(car.userData.laneX, LANE_X[car.userData.targetLane], 1 - Math.pow(0.18, dt));
+    const curveX = roadCurveAt(car.position.z, race);
+    car.position.x = car.userData.laneX + curveX;
+    car.rotation.y = THREE.MathUtils.lerp(car.rotation.y, roadHeadingAt(car.position.z, race), 1 - Math.pow(0.02, dt));
+    const lateralDistance = Math.abs(car.position.x - race.playerX);
     if (
       race.collisionCooldown <= 0 &&
       car.userData.cooldown <= 0 &&
       Math.abs(car.position.z - PLAYER_Z) < 3.2 &&
-      Math.abs(car.position.x - race.playerX) < 2
+      lateralDistance < 2
     ) {
-      race.speed *= 0.34;
-      race.elapsed += 2;
-      race.collisionCooldown = 1.2;
-      car.userData.cooldown = 1.2;
-      car.position.x += car.position.x <= race.playerX ? -1.4 : 1.4;
-      showToast("ÇARPIŞMA · +2 SN", true);
+      triggerImpact(car);
+    } else if (previousZ <= PLAYER_Z && car.position.z > PLAYER_Z && lateralDistance >= 2 && lateralDistance < 3.65) {
+      race.nearMisses += 1;
+      addScore(420, 0.35);
+      playTone(620 + Math.min(4, race.combo) * 80, 0.11, "square", 0.025);
+      showToast("YAKIN GEÇİŞ · +" + Math.round(420 * race.combo), false, "×");
     }
   });
 
@@ -1132,6 +1276,7 @@ function updateWorld(dt, time) {
     if (card.userData.collected) return;
     const delta = card.userData.distance - race.distance;
     card.position.z = PLAYER_Z - delta * WORLD_SCALE;
+    card.position.x = card.userData.laneX + roadCurveAt(card.position.z, race);
     card.rotation.y = time * 1.6 + card.userData.index;
     card.visible = delta > -35 && delta < 900;
     if (delta < 24 && delta > -12 && Math.abs(card.position.x - race.playerX) < 1.8) {
@@ -1146,25 +1291,48 @@ function updateRace(dt, time) {
   const race = state.race;
   const input = readControls();
   const vehicle = race.vehicle;
-  if (input.gas > 0) race.speed += vehicle.acceleration * input.gas * dt;
-  else race.speed -= 15 * dt;
+  const initialSpeedRatio = THREE.MathUtils.clamp(race.speed / vehicle.maxSpeed, 0, 1.2);
+  race.boostActive = input.boost > 0 && input.gas > 0 && race.boost > 0.5 && race.speed > 28;
+  if (race.boostActive) {
+    race.boost = Math.max(0, race.boost - 31 * dt);
+    race.speed += 37 * dt;
+  } else {
+    race.boost = Math.min(100, race.boost + (input.gas > 0 ? 7 : 12) * dt);
+  }
+  if (race.boostActive && !race.boostWasActive) playTone(210, 0.17, "sawtooth", 0.025);
+  race.boostWasActive = race.boostActive;
+
+  if (input.gas > 0) race.speed += vehicle.acceleration * input.gas * (1 - Math.min(0.62, initialSpeedRatio * 0.55)) * dt;
+  else race.speed -= (8 + initialSpeedRatio * 8) * dt;
   if (input.brake > 0) race.speed -= vehicle.brake * input.brake * dt;
 
-  const speedRatio = race.speed / vehicle.maxSpeed;
+  race.speed -= initialSpeedRatio * initialSpeedRatio * 3.2 * dt;
+  const speedRatio = THREE.MathUtils.clamp(race.speed / vehicle.maxSpeed, 0, 1.2);
   race.steer = THREE.MathUtils.lerp(race.steer, input.steer, 1 - Math.pow(0.002, dt));
-  race.playerX += input.steer * vehicle.handling * (3.2 + speedRatio * 3.6) * dt;
-  race.playerX *= Math.pow(0.997, dt * 60);
-  if (Math.abs(race.playerX) > 7.25) race.speed -= 62 * dt;
+  race.playerX += input.steer * vehicle.handling * (4.25 + Math.min(1, speedRatio) * 2.2) * dt;
+  race.playerX *= Math.pow(0.9984, dt * 60);
+  race.offRoad = Math.abs(race.playerX) > 7.25;
+  if (race.offRoad) race.speed -= (54 + race.speed * 0.14) * dt;
   race.playerX = THREE.MathUtils.clamp(race.playerX, -9, 9);
-  race.speed = THREE.MathUtils.clamp(race.speed, 0, vehicle.maxSpeed);
+  const dynamicTopSpeed = vehicle.maxSpeed * (race.boostActive ? 1.14 : 1);
+  race.speed = THREE.MathUtils.clamp(race.speed, 0, dynamicTopSpeed);
   race.maxSpeed = Math.max(race.maxSpeed, race.speed);
   race.distance += race.speed * dt * 0.36;
   race.elapsed += dt;
+  race.score += race.speed * dt * 0.2 * race.combo;
+  race.comboTimer = Math.max(0, race.comboTimer - dt);
+  if (race.comboTimer <= 0) race.combo = THREE.MathUtils.lerp(race.combo, 1, 1 - Math.pow(0.05, dt));
   race.collisionCooldown = Math.max(0, race.collisionCooldown - dt);
+  race.impactShake = Math.max(0, race.impactShake - dt * 3.8);
+
+  screens.game.classList.toggle("boosting", race.boostActive);
+  screens.game.classList.toggle("offroad", race.offRoad);
+  driveEffects.style.setProperty("--speed-intensity", Math.max(0, Math.min(1, (speedRatio - 0.46) / 0.54)).toFixed(3));
 
   if (playerCar) {
     playerCar.position.x = THREE.MathUtils.lerp(playerCar.position.x, race.playerX, 1 - Math.pow(0.0003, dt));
-    playerCar.position.y = 0.02 + Math.sin(race.distance * 0.08) * speedRatio * 0.025;
+    const roadRumble = race.offRoad ? Math.sin(time * 54) * 0.055 : Math.sin(race.distance * 0.08) * speedRatio * 0.025;
+    playerCar.position.y = 0.02 + roadRumble;
     playerCar.rotation.y = THREE.MathUtils.lerp(
       playerCar.rotation.y,
       vehicle.viewYaw - race.steer * 0.24,
@@ -1175,12 +1343,12 @@ function updateRace(dt, time) {
 
   updateWorld(dt, time);
   if (race.distance >= race.map.distance || race.elapsed >= race.map.timeLimit) finishRace();
-  updateAudio(race.speed, vehicle.maxSpeed, true);
+  updateAudio(race.speed, vehicle.maxSpeed, true, race.boostActive);
   updateHud();
 }
 
-function showToast(message, danger) {
-  collectToast.innerHTML = danger ? '<span>!</span> ' + message : '<span>+1</span> ' + message;
+function showToast(message, danger, badge) {
+  collectToast.innerHTML = '<span>' + (badge || (danger ? "!" : "+1")) + "</span> " + message;
   collectToast.style.background = danger ? "#ff4c28" : "";
   collectToast.classList.remove("show");
   void collectToast.offsetWidth;
@@ -1197,7 +1365,9 @@ function collectPage(index) {
   race.pages.add(index);
   const pip = hud.pages.querySelector('[data-pip="' + index + '"]');
   if (pip) pip.classList.add("on");
-  showToast("KAYIP ÇİZİM BULUNDU", false);
+  addScore(900, 0.5);
+  playTone(760 + index * 110, 0.22, "sine", 0.045);
+  showToast("KAYIP ÇİZİM · +" + Math.round(900 * race.combo), false, "+");
 }
 
 function updateHud() {
@@ -1211,6 +1381,11 @@ function updateHud() {
   hud.speed.textContent = Math.round(race.speed).toString().padStart(3, "0");
   hud.speedBar.style.width = Math.min(100, race.speed / race.vehicle.maxSpeed * 100) + "%";
   hud.gear.textContent = race.speed < 3 ? "N" : Math.min(6, Math.max(1, Math.ceil(race.speed / 38))).toString();
+  hud.score.textContent = Math.round(race.score).toString().padStart(6, "0");
+  hud.combo.textContent = "×" + race.combo.toFixed(1);
+  hud.combo.classList.toggle("hot", race.combo >= 2);
+  hud.boost.style.width = race.boost.toFixed(1) + "%";
+  hud.boostLabel.textContent = Math.round(race.boost).toString().padStart(2, "0");
 }
 
 function finishRace() {
@@ -1230,6 +1405,7 @@ function finishRace() {
   document.getElementById("resultTime").textContent = formatTime(race.elapsed);
   document.getElementById("resultPages").textContent = pages + " / 4";
   document.getElementById("resultSpeed").textContent = Math.round(race.maxSpeed) + " KM/H";
+  document.getElementById("resultScore").textContent = Math.round(race.score).toString().padStart(6, "0");
   document.getElementById("resultMessage").textContent = finishedDistance
     ? pages === 4
       ? "Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi."
@@ -1241,12 +1417,17 @@ function finishRace() {
 function renderScene(time) {
   const race = state.race;
   if (!race) return;
-  const speedRatio = race.speed / race.vehicle.maxSpeed;
+  const speedRatio = THREE.MathUtils.clamp(race.speed / race.vehicle.maxSpeed, 0, 1.2);
   const targetCameraX = race.playerX * 0.72;
-  camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCameraX, 0.075);
-  camera.position.y = 3.35 + speedRatio * 0.32 + Math.sin(time * 28) * speedRatio * 0.014;
-  camera.position.z = 14.2 - speedRatio * 0.7;
+  const shake = race.impactShake;
+  camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCameraX, 0.075) + Math.sin(time * 71) * shake * 0.16;
+  camera.position.y = 3.35 + speedRatio * 0.34 + Math.sin(time * (race.offRoad ? 48 : 28)) * (speedRatio * 0.014 + (race.offRoad ? 0.035 : 0)) + Math.cos(time * 63) * shake * 0.1;
+  camera.position.z = 14.2 - speedRatio * 0.72 - (race.boostActive ? 0.38 : 0);
+  const targetFov = 56 + speedRatio * 6.5 + (race.boostActive ? 4.5 : 0);
+  camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.07);
+  camera.updateProjectionMatrix();
   camera.lookAt(race.playerX * 0.34, 0.75, -10.5 - speedRatio * 3.6);
+  camera.rotation.z -= race.steer * speedRatio * 0.012;
   renderer.render(scene, camera);
 }
 
