@@ -118,9 +118,10 @@
             <div class="hud-right"><button id="pauseButton" type="button">Ⅱ</button><div><small>TIME</small><b id="timeLabel">00:00.0</b></div></div>
           </div>
           <div class="speed-cluster"><b id="speedLabel">000</b><span>KM/H</span><div class="speed-bar"><i id="speedBar"></i></div><small id="gearLabel">N</small></div>
-          <div class="drive-score"><small>SKOR <i id="difficultyLabel">SEVİYE 1</i></small><b id="scoreLabel">000000</b><em id="comboLabel">×1.0</em></div>
+          <div class="drive-score"><small>SKOR <i id="difficultyLabel">SEVİYE 1</i></small><b id="scoreLabel">000000</b><em id="comboLabel">×1.0</em><div class="clean-progress"><span>TEMİZ SÜRÜŞ</span><i><b id="difficultyProgress"></b></i></div></div>
           <div class="boost-cluster"><small>BOOST</small><div><i id="boostBar"></i></div><b id="boostLabel">100</b></div>
           <div class="drive-effects" id="driveEffects" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="traffic-radar" aria-label="Yakındaki trafik radarı"><small>TRAFİK</small><div id="trafficRadar"><b></b></div></div>
           <div class="model-status" id="modelStatus">3B MODEL HAZIRLANIYOR</div>
           <div class="countdown" id="countdown">3</div>
           <div class="toast" id="collectToast"><span>+1</span> KAYIP ÇİZİM BULUNDU</div>
@@ -154,6 +155,6 @@
         }
       }
     </script>
-    <script type="module" src="./game3d.js?v=stable-road-21"></script>
+    <script type="module" src="./game3d.js?v=traffic-driver-22"></script>
   </body>
 </html>

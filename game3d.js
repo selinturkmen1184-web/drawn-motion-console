@@ -137,9 +137,17 @@ const hud = {
   score: document.getElementById("scoreLabel"),
   combo: document.getElementById("comboLabel"),
   difficulty: document.getElementById("difficultyLabel"),
+  difficultyProgress: document.getElementById("difficultyProgress"),
   boost: document.getElementById("boostBar"),
   boostLabel: document.getElementById("boostLabel"),
+  radar: document.getElementById("trafficRadar"),
 };
+
+const radarMarkers = Array.from({ length: 10 }, function () {
+  const marker = document.createElement("i");
+  hud.radar.appendChild(marker);
+  return marker;
+});
 
 const state = {
   screen: "home",
@@ -451,6 +459,40 @@ function makeMaterial(color, roughness, metalness) {
   });
 }
 
+function createAsphaltTexture() {
+  const textureCanvas = document.createElement("canvas");
+  textureCanvas.width = 192;
+  textureCanvas.height = 384;
+  const context = textureCanvas.getContext("2d");
+  context.fillStyle = "#c2c3c4";
+  context.fillRect(0, 0, textureCanvas.width, textureCanvas.height);
+  for (let index = 0; index < 5200; index += 1) {
+    const tone = 145 + (index * 37) % 68;
+    context.fillStyle = "rgb(" + tone + "," + tone + "," + tone + ")";
+    context.globalAlpha = 0.12 + ((index * 13) % 30) / 100;
+    const x = (index * 67) % textureCanvas.width;
+    const y = (index * 109) % textureCanvas.height;
+    context.fillRect(x, y, 1 + (index % 3), 1 + (index % 2));
+  }
+  context.globalAlpha = 0.1;
+  context.strokeStyle = "#56585b";
+  context.lineWidth = 2;
+  [42, 76, 118, 151].forEach(function (x, index) {
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.bezierCurveTo(x + 3, 120, x - 4, 250, x + index - 2, 384);
+    context.stroke();
+  });
+  context.globalAlpha = 1;
+  const texture = new THREE.CanvasTexture(textureCanvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3.6, 8);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
 function createWheel(radius, width) {
   const wheel = new THREE.Mesh(
     new THREE.CylinderGeometry(radius, radius, width, 20),
@@ -522,7 +564,14 @@ function createFallbackVehicle(vehicle, trafficColor) {
     tail.position.set(xFactor * width * 0.58, 0.98, length * 0.515);
     group.add(tail);
   });
+  const plate = new THREE.Mesh(
+    new THREE.BoxGeometry(width * 0.32, 0.18, 0.035),
+    new THREE.MeshStandardMaterial({ color: 0xe8e3d2, roughness: 0.42, metalness: 0.08 }),
+  );
+  plate.position.set(0, 0.72, length * 0.535);
+  group.add(plate);
   group.userData.isFallback = true;
+  group.userData.tailMaterial = tailMaterial;
   return group;
 }
 
@@ -927,6 +976,7 @@ function buildRoad(map) {
   sun.intensity = map.scenery === "city" ? 2.2 : 3.6;
 
   const roadMaterial = makeMaterial(map.road, 0.88, 0.05);
+  roadMaterial.map = createAsphaltTexture();
   const shoulderMaterial = makeMaterial(map.shoulder, 0.93, 0.02);
   const lineMaterial = new THREE.MeshStandardMaterial({
     color: map.line,
@@ -935,6 +985,20 @@ function buildRoad(map) {
     emissiveIntensity: 0.55,
   });
   const railMaterial = makeMaterial(0xbac1c8, 0.34, 0.72);
+  const postMaterial = makeMaterial(0x858d95, 0.46, 0.64);
+  const reflectorMaterial = new THREE.MeshStandardMaterial({
+    color: map.scenery === "city" ? 0xe9f4ff : 0xffe7aa,
+    emissive: map.scenery === "city" ? 0x7bb6e8 : 0xc97c25,
+    emissiveIntensity: 2.4,
+    roughness: 0.28,
+  });
+  const signMaterial = new THREE.MeshStandardMaterial({
+    color: map.scenery === "canyon" ? 0x5e2e22 : map.scenery === "forest" ? 0x173f31 : 0x172c43,
+    emissive: map.scenery === "city" ? 0x071424 : 0x000000,
+    emissiveIntensity: 0.85,
+    roughness: 0.48,
+    metalness: 0.24,
+  });
 
   for (let index = 0; index < SEGMENT_COUNT; index += 1) {
     const segment = new THREE.Group();
@@ -949,10 +1013,21 @@ function buildRoad(map) {
       shoulder.position.set(side * 13, -0.17, 0);
       shoulder.receiveShadow = true;
       segment.add(shoulder);
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.45, SEGMENT_LENGTH + 0.8), railMaterial);
-      rail.position.set(side * 9.7, 0.48, 0);
+      const edgeLine = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.03, SEGMENT_LENGTH + 0.9), lineMaterial);
+      edgeLine.position.set(side * 8.55, 0.012, 0);
+      segment.add(edgeLine);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, SEGMENT_LENGTH + 0.8), railMaterial);
+      rail.position.set(side * 9.7, 0.62, 0);
       rail.castShadow = true;
       segment.add(rail);
+      [-16, -6, 4, 14].forEach(function (z) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.78, 0.16), postMaterial);
+        post.position.set(side * 9.7, 0.28, z);
+        post.castShadow = true;
+        const reflector = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.055), reflectorMaterial);
+        reflector.position.set(side * 9.61, 0.58, z + 0.02);
+        segment.add(post, reflector);
+      });
     });
 
     [-2.55, 2.55].forEach(function (laneX) {
@@ -975,6 +1050,29 @@ function buildRoad(map) {
       }
     }
 
+    if (index % 5 === 2) {
+      const gantry = new THREE.Group();
+      [-1, 1].forEach(function (side) {
+        const support = new THREE.Mesh(new THREE.BoxGeometry(0.18, 5.8, 0.18), postMaterial);
+        support.position.set(side * 9.25, 2.78, 0);
+        support.castShadow = true;
+        gantry.add(support);
+      });
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(18.7, 0.2, 0.2), postMaterial);
+      beam.position.y = 5.58;
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(5.6, 1.12, 0.14), signMaterial);
+      sign.position.set(index % 2 ? -3.2 : 3.2, 5.06, 0.08);
+      sign.castShadow = true;
+      gantry.add(beam, sign);
+      [-1.6, 0, 1.6].forEach(function (x) {
+        const guide = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.055, 0.035), reflectorMaterial);
+        guide.position.set(sign.position.x + x, 5.05, 0.17);
+        gantry.add(guide);
+      });
+      gantry.position.z = -8;
+      segment.add(gantry);
+    }
+
     roadWorld.add(segment);
     roadSegments.push(segment);
   }
@@ -983,21 +1081,55 @@ function buildRoad(map) {
 
 function createTrafficVehicle(index) {
   const palette = [0x1d2737, 0xc7c9c6, 0x8b1520, 0x305d75, 0xd98a22, 0x252525];
-  const template = { color: palette[index % palette.length], truck: index % 5 === 0 };
+  const template = { color: palette[index % palette.length], truck: index % 5 === 0 || index % 9 === 6 };
   const vehicle = {
     color: template.color,
     truck: template.truck,
   };
   const car = createFallbackVehicle(vehicle, template.color);
   const scale = template.truck ? 0.86 : 0.79 + (index % 3) * 0.04;
-  car.scale.setScalar(scale);
+  const widthVariation = template.truck ? 1.02 : 0.92 + (index % 4) * 0.035;
+  const lengthVariation = template.truck ? 1.08 : 0.94 + ((index + 2) % 3) * 0.04;
+  car.scale.set(scale * widthVariation, scale, scale * lengthVariation);
   car.userData.speed = 58 + (index * 17) % 74;
+  car.userData.cruiseSpeed = car.userData.speed;
+  car.userData.isTrafficTruck = template.truck;
   car.userData.lane = index % 3;
   car.userData.targetLane = index % 3;
   car.userData.laneX = LANE_X[index % 3];
   car.userData.changeTimer = 1.5 + (index % 4) * 0.8;
   car.userData.cooldown = 0;
   return car;
+}
+
+function trafficLaneIsClear(car, lane) {
+  return trafficCars.every(function (other) {
+    if (other === car || other.userData.targetLane !== lane) return true;
+    return Math.abs(other.position.z - car.position.z) > (other.userData.isTrafficTruck || car.userData.isTrafficTruck ? 29 : 23);
+  });
+}
+
+function updateTrafficRadar() {
+  if (!state.race) return;
+  const visible = trafficCars
+    .map(function (car) { return { car, distance: PLAYER_Z - car.position.z }; })
+    .filter(function (item) { return item.distance > -10 && item.distance < 285; })
+    .sort(function (a, b) { return a.distance - b.distance; })
+    .slice(0, radarMarkers.length);
+  radarMarkers.forEach(function (marker, index) {
+    const item = visible[index];
+    if (!item) {
+      marker.style.display = "none";
+      return;
+    }
+    const laneRatio = THREE.MathUtils.clamp((item.car.position.x + 5.1) / 10.2, 0, 1);
+    const distanceRatio = THREE.MathUtils.clamp(item.distance / 285, 0, 1);
+    marker.style.display = "block";
+    marker.style.left = (17 + laneRatio * 66) + "%";
+    marker.style.top = (77 - distanceRatio * 69) + "%";
+    marker.classList.toggle("truck", item.car.userData.isTrafficTruck);
+    marker.classList.toggle("near", item.distance < 58);
+  });
 }
 
 function buildTraffic(map) {
@@ -1080,6 +1212,7 @@ async function startRace() {
     comboTimer: 0,
     nearMisses: 0,
     difficultyLevel: 1,
+    difficultyStartDistance: 0,
     nextDifficultyDistance: 360,
     cleanRun: true,
     finishPending: false,
@@ -1191,6 +1324,7 @@ function addDifficultyTraffic(race) {
   car.userData.targetLane = lane;
   car.userData.laneX = LANE_X[lane];
   car.userData.speed = 42 + Math.random() * (84 + race.difficultyLevel * 5);
+  car.userData.cruiseSpeed = car.userData.speed;
   car.userData.changeTimer = 0.7 + Math.random() * 1.6;
   car.position.set(car.userData.laneX, 0.02, -310 - index * 32 - Math.random() * 110);
   trafficWorld.add(car);
@@ -1201,6 +1335,7 @@ function updateDifficulty() {
   const race = state.race;
   if (!race || !race.cleanRun || race.difficultyLevel >= 6 || race.distance < race.nextDifficultyDistance) return;
   race.difficultyLevel += 1;
+  race.difficultyStartDistance = race.nextDifficultyDistance;
   race.nextDifficultyDistance += Math.max(260, 390 - race.difficultyLevel * 22);
   addDifficultyTraffic(race);
   addScore(350 * race.difficultyLevel, 0.2);
@@ -1240,6 +1375,7 @@ function recycleTraffic(car, index) {
   car.userData.laneX = LANE_X[car.userData.lane];
   car.position.x = car.userData.laneX;
   car.userData.speed = 46 + Math.random() * (88 + difficulty * 6);
+  car.userData.cruiseSpeed = car.userData.speed;
   car.userData.changeTimer = (1 + Math.random() * 3.6) / (1 + (difficulty - 1) * 0.16);
   car.userData.cooldown = 0;
 }
@@ -1256,22 +1392,48 @@ function updateWorld(dt, time) {
 
   trafficCars.forEach(function (car, index) {
     if (race.finishPending || race.finished) return;
+    let leader = null;
+    let leaderGap = Infinity;
+    trafficCars.forEach(function (other) {
+      if (other === car || other.userData.targetLane !== car.userData.targetLane || other.position.z >= car.position.z) return;
+      const gap = car.position.z - other.position.z;
+      if (gap < leaderGap) {
+        leaderGap = gap;
+        leader = other;
+      }
+    });
+    const braking = Boolean(leader && leaderGap < (car.userData.isTrafficTruck ? 44 : 36));
+    const targetTrafficSpeed = braking
+      ? Math.max(32, Math.min(car.userData.cruiseSpeed, leader.userData.speed - 4 + leaderGap * 0.22))
+      : car.userData.cruiseSpeed;
+    car.userData.speed = THREE.MathUtils.lerp(
+      car.userData.speed,
+      targetTrafficSpeed,
+      1 - Math.pow(braking ? 0.012 : 0.18, dt),
+    );
+    if (car.userData.tailMaterial) car.userData.tailMaterial.emissiveIntensity = braking ? 5.2 : 1.8;
     const previousZ = car.position.z;
     const relative = (race.speed - car.userData.speed) * dt * WORLD_SCALE;
     car.position.z += relative;
     car.userData.cooldown = Math.max(0, car.userData.cooldown - dt);
     car.userData.changeTimer -= dt;
     if (car.position.z > 24 || car.position.z < -760) recycleTraffic(car, index);
-    if (car.userData.changeTimer <= 0 && car.position.z < -42) {
-      const direction = Math.random() > 0.5 ? 1 : -1;
-      car.userData.targetLane = THREE.MathUtils.clamp(car.userData.lane + direction, 0, 2);
-      car.userData.lane = car.userData.targetLane;
+    if ((car.userData.changeTimer <= 0 || (braking && leaderGap < 26)) && car.position.z < -42) {
+      const directions = Math.random() > 0.5 ? [-1, 1] : [1, -1];
+      const openLane = directions
+        .map(function (direction) { return car.userData.lane + direction; })
+        .find(function (lane) { return lane >= 0 && lane <= 2 && trafficLaneIsClear(car, lane); });
+      if (openLane !== undefined) {
+        car.userData.targetLane = openLane;
+        car.userData.lane = openLane;
+      }
       car.userData.changeTimer = (3.5 + Math.random() * 5.5) / (1 + (race.difficultyLevel - 1) * 0.24);
     }
     const laneChangeGrip = Math.max(0.09, 0.18 - (race.difficultyLevel - 1) * 0.015);
+    const laneTurn = LANE_X[car.userData.targetLane] - car.userData.laneX;
     car.userData.laneX = THREE.MathUtils.lerp(car.userData.laneX, LANE_X[car.userData.targetLane], 1 - Math.pow(laneChangeGrip, dt));
     car.position.x = car.userData.laneX;
-    car.rotation.y = THREE.MathUtils.lerp(car.rotation.y, 0, 1 - Math.pow(0.02, dt));
+    car.rotation.y = THREE.MathUtils.lerp(car.rotation.y, -laneTurn * 0.018, 1 - Math.pow(0.02, dt));
     const lateralDistance = Math.abs(car.position.x - race.playerX);
     if (
       race.collisionCooldown <= 0 &&
@@ -1407,8 +1569,14 @@ function updateHud() {
   hud.combo.textContent = "×" + race.combo.toFixed(1);
   hud.combo.classList.toggle("hot", race.combo >= 2);
   hud.difficulty.textContent = "SEVİYE " + race.difficultyLevel;
+  const difficultySpan = Math.max(1, race.nextDifficultyDistance - race.difficultyStartDistance);
+  const difficultyProgress = race.difficultyLevel >= 6
+    ? 100
+    : THREE.MathUtils.clamp((race.distance - race.difficultyStartDistance) / difficultySpan * 100, 0, 100);
+  hud.difficultyProgress.style.width = difficultyProgress.toFixed(1) + "%";
   hud.boost.style.width = race.boost.toFixed(1) + "%";
   hud.boostLabel.textContent = Math.round(race.boost).toString().padStart(2, "0");
+  updateTrafficRadar();
 }
 
 function finishRace(reason) {
