@@ -7,7 +7,7 @@
     <meta name="description" content="TheDrawnMotion Collector's Run — üç haritalı, gamepad destekli sürüş oyunu." />
     <meta property="og:title" content="TheDrawnMotion — Collector's Run" />
     <meta property="og:description" content="İki özel araç, üç rota, tek koleksiyon." />
-    <meta property="og:image" content="../og.png" />
+    <meta property="og:image" content="./og.png" />
     <title>TheDrawnMotion — Collector's Run</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -43,8 +43,8 @@
             </div>
           </div>
           <div class="hero-art" aria-hidden="true">
-            <div class="hero-card hero-card-back"><img src="../cars/clk55-city.jpg" alt="" /></div>
-            <div class="hero-card hero-card-front"><img src="../cars/silverado-front.jpg" alt="" /></div>
+            <div class="hero-card hero-card-back"><img src="./cars/clk55-city.jpg" alt="" /></div>
+            <div class="hero-card hero-card-front"><img src="./cars/silverado-front.jpg" alt="" /></div>
             <div class="edition-seal"><small>LIMITED</small><b>02</b><small>EDITION</small></div>
             <div class="route-line"></div>
           </div>
@@ -58,7 +58,7 @@
           </div>
           <div class="vehicle-select-grid">
             <article class="vehicle-select-card selected" data-vehicle="silverado" tabindex="0">
-              <div class="vehicle-photo"><img src="../cars/silverado-rear.jpg" alt="Beyaz Overland Silverado" /><span>01</span></div>
+              <div class="vehicle-photo"><img src="./cars/silverado-rear.jpg" alt="Beyaz Overland Silverado" /><span>01</span></div>
               <div class="vehicle-card-copy">
                 <p>ADVENTURE CLASS</p><h3>OVERLAND<br />SILVERADO</h3>
                 <div class="stat"><span>HIZ</span><i><b style="width: 72%"></b></i><em>170</em></div>
@@ -68,7 +68,7 @@
               <div class="selected-mark">SEÇİLDİ</div>
             </article>
             <article class="vehicle-select-card" data-vehicle="clk55" tabindex="0">
-              <div class="vehicle-photo"><img src="../cars/clk55-city.jpg" alt="Bronz CLK 55 AMG Cabriolet" /><span>02</span></div>
+              <div class="vehicle-photo"><img src="./cars/clk55-city.jpg" alt="Bronz CLK 55 AMG Cabriolet" /><span>02</span></div>
               <div class="vehicle-card-copy">
                 <p>GRAND TOURER CLASS</p><h3>CLK 55 AMG<br />CABRIOLET</h3>
                 <div class="stat"><span>HIZ</span><i><b style="width: 96%"></b></i><em>240</em></div>
@@ -110,7 +110,7 @@
           <canvas id="gameCanvas" aria-label="Sürüş oyunu alanı"></canvas>
           <div class="game-hud">
             <div class="hud-left">
-              <div class="hud-vehicle"><img id="hudVehicleImage" src="../cars/silverado-front.jpg" alt="Seçili araç" /><span><small id="hudClass">ADVENTURE CLASS</small><b id="hudVehicle">OVERLAND SILVERADO</b></span></div>
+              <div class="hud-vehicle"><img id="hudVehicleImage" src="./cars/silverado-front.jpg" alt="Seçili araç" /><span><small id="hudClass">ADVENTURE CLASS</small><b id="hudVehicle">OVERLAND SILVERADO</b></span></div>
               <div class="mission"><small>MISSION</small><span>KAYIP ÇİZİMLERİ TOPLA</span><b><i id="pagePips"></i><em id="pageCounter">0 / 4</em></b></div>
             </div>
             <div class="hud-center"><small id="hudMap">NEON CITY CIRCUIT</small><div class="track-progress"><i id="trackProgress"></i><span id="distanceLabel">0.0 / 2.4 KM</span></div></div>
@@ -128,7 +128,7 @@
         </section>
 
         <section class="screen result-screen" id="resultScreen" aria-labelledby="resultTitle">
-          <div class="result-art"><img id="resultImage" src="../cars/silverado-front.jpg" alt="Tamamlanan aracın koleksiyon görseli" /><div class="result-grade" id="resultGrade">A</div></div>
+          <div class="result-art"><img id="resultImage" src="./cars/silverado-front.jpg" alt="Tamamlanan aracın koleksiyon görseli" /><div class="result-grade" id="resultGrade">A</div></div>
           <div class="result-copy"><p class="kicker">ROUTE COMPLETE</p><h2 id="resultTitle">KOLEKSİYONA<br />YENİ BİR HİKÂYE.</h2><div class="result-stats"><div><small>SÜRE</small><b id="resultTime">00:00.0</b></div><div><small>ÇİZİM</small><b id="resultPages">4 / 4</b></div><div><small>EN YÜKSEK HIZ</small><b id="resultSpeed">210 KM/H</b></div></div><p id="resultMessage">Tüm kayıp çizimler bulundu. Bu rota koleksiyona başarıyla işlendi.</p><div class="result-actions"><button class="primary-button" id="replayButton" type="button"><span>TEKRAR SÜR</span><i>↻</i></button><button class="ghost-button light" id="newRouteButton" type="button">YENİ ROTA</button></div></div>
         </section>
       </main>
