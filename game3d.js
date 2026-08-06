@@ -67,9 +67,6 @@ const maps = {
     accent: 0xff4c28,
     traffic: 11,
     scenery: "city",
-    curveAmplitude: 4.2,
-    curveFrequency: 0.0042,
-    curvePhase: 0.4,
   },
   canyon: {
     id: "canyon",
@@ -87,9 +84,6 @@ const maps = {
     accent: 0xf2c451,
     traffic: 7,
     scenery: "canyon",
-    curveAmplitude: 6.8,
-    curveFrequency: 0.0036,
-    curvePhase: 1.7,
   },
   forest: {
     id: "forest",
@@ -107,9 +101,6 @@ const maps = {
     accent: 0xd4ff43,
     traffic: 8,
     scenery: "forest",
-    curveAmplitude: 5.4,
-    curveFrequency: 0.0048,
-    curvePhase: 2.5,
   },
 };
 
@@ -948,17 +939,17 @@ function buildRoad(map) {
   for (let index = 0; index < SEGMENT_COUNT; index += 1) {
     const segment = new THREE.Group();
     segment.position.z = 16 - index * SEGMENT_LENGTH;
-    const road = new THREE.Mesh(new THREE.BoxGeometry(18, 0.16, SEGMENT_LENGTH + 0.2), roadMaterial);
+    const road = new THREE.Mesh(new THREE.BoxGeometry(18, 0.16, SEGMENT_LENGTH + 1.2), roadMaterial);
     road.position.y = -0.12;
     road.receiveShadow = true;
     segment.add(road);
 
     [-1, 1].forEach(function (side) {
-      const shoulder = new THREE.Mesh(new THREE.BoxGeometry(8, 0.12, SEGMENT_LENGTH + 0.2), shoulderMaterial);
+      const shoulder = new THREE.Mesh(new THREE.BoxGeometry(8, 0.12, SEGMENT_LENGTH + 1.2), shoulderMaterial);
       shoulder.position.set(side * 13, -0.17, 0);
       shoulder.receiveShadow = true;
       segment.add(shoulder);
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.45, SEGMENT_LENGTH), railMaterial);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.45, SEGMENT_LENGTH + 0.8), railMaterial);
       rail.position.set(side * 9.7, 0.48, 0);
       rail.castShadow = true;
       segment.add(rail);
@@ -1183,21 +1174,6 @@ function quitRace(target) {
   showScreen(target);
 }
 
-function roadCurveAt(z, race) {
-  const map = race.map;
-  const distanceAhead = (PLAYER_Z - z) / WORLD_SCALE;
-  const currentPhase = race.distance * map.curveFrequency + map.curvePhase;
-  const aheadPhase = (race.distance + distanceAhead) * map.curveFrequency + map.curvePhase;
-  return map.curveAmplitude * (Math.sin(aheadPhase) - Math.sin(currentPhase));
-}
-
-function roadHeadingAt(z, race) {
-  const sample = 7;
-  const near = roadCurveAt(z + sample, race);
-  const far = roadCurveAt(z - sample, race);
-  return Math.atan2(far - near, sample * 2);
-}
-
 function addScore(points, comboStep) {
   const race = state.race;
   if (!race) return;
@@ -1274,8 +1250,8 @@ function updateWorld(dt, time) {
   roadSegments.forEach(function (segment) {
     segment.position.z += travel;
     if (segment.position.z > 37) segment.position.z -= SEGMENT_LENGTH * SEGMENT_COUNT;
-    segment.position.x = roadCurveAt(segment.position.z, race);
-    segment.rotation.y = roadHeadingAt(segment.position.z, race);
+    segment.position.x = 0;
+    segment.rotation.y = 0;
   });
 
   trafficCars.forEach(function (car, index) {
@@ -1294,9 +1270,8 @@ function updateWorld(dt, time) {
     }
     const laneChangeGrip = Math.max(0.09, 0.18 - (race.difficultyLevel - 1) * 0.015);
     car.userData.laneX = THREE.MathUtils.lerp(car.userData.laneX, LANE_X[car.userData.targetLane], 1 - Math.pow(laneChangeGrip, dt));
-    const curveX = roadCurveAt(car.position.z, race);
-    car.position.x = car.userData.laneX + curveX;
-    car.rotation.y = THREE.MathUtils.lerp(car.rotation.y, roadHeadingAt(car.position.z, race), 1 - Math.pow(0.02, dt));
+    car.position.x = car.userData.laneX;
+    car.rotation.y = THREE.MathUtils.lerp(car.rotation.y, 0, 1 - Math.pow(0.02, dt));
     const lateralDistance = Math.abs(car.position.x - race.playerX);
     if (
       race.collisionCooldown <= 0 &&
@@ -1317,7 +1292,7 @@ function updateWorld(dt, time) {
     if (card.userData.collected) return;
     const delta = card.userData.distance - race.distance;
     card.position.z = PLAYER_Z - delta * WORLD_SCALE;
-    card.position.x = card.userData.laneX + roadCurveAt(card.position.z, race);
+    card.position.x = card.userData.laneX;
     card.rotation.y = time * 1.6 + card.userData.index;
     card.visible = delta > -35 && delta < 900;
     if (delta < 24 && delta > -12 && Math.abs(card.position.x - race.playerX) < 1.8) {
