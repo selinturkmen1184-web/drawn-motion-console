@@ -8,12 +8,13 @@ const vehicles = {
     id: "silverado",
     name: "OVERLAND SILVERADO",
     className: "ADVENTURE CLASS",
-    image: "./cars/silverado-front.jpg",
-    resultImage: "./cars/silverado-rear.jpg",
-    photoModel: "./cars/silverado-rear-cutout.png",
+    image: "../cars/silverado-front.jpg",
+    resultImage: "../cars/silverado-rear.jpg",
+    photoModel: "../cars/silverado-rear-tight.png",
     photoWidth: 3.2,
-    photoAnchorY: 0.285,
-    model: "./models/silverado.glb",
+    photoHeightScale: 1.16,
+    photoAnchorY: 0.02,
+    model: "../models/silverado.glb",
     maxSpeed: 170,
     acceleration: 42,
     brake: 72,
@@ -25,18 +26,20 @@ const vehicles = {
     wheelRadius: 0.56,
     color: 0xe7e5db,
     modelRotation: Math.PI,
+    viewYaw: 0,
     truck: true,
   },
   clk55: {
     id: "clk55",
     name: "CLK 55 AMG CABRIOLET",
     className: "GRAND TOURER CLASS",
-    image: "./cars/clk55-city.jpg",
-    resultImage: "./cars/clk55-rear.jpg",
-    photoModel: "./cars/clk55-rear-cutout.png",
-    photoWidth: 2.85,
-    photoAnchorY: 0.235,
-    model: "./models/clk55.glb",
+    image: "../cars/clk55-city.jpg",
+    resultImage: "../cars/clk55-rear.jpg",
+    photoModel: "../cars/clk55-rear-tight.png",
+    photoWidth: 1.95,
+    photoHeightScale: 1,
+    photoAnchorY: 0.02,
+    model: "../models/clk55.glb",
     maxSpeed: 240,
     acceleration: 56,
     brake: 84,
@@ -48,6 +51,7 @@ const vehicles = {
     wheelRadius: 0.42,
     color: 0xa66f53,
     modelRotation: Math.PI,
+    viewYaw: 0,
     truck: false,
   },
 };
@@ -166,7 +170,7 @@ renderer.toneMappingExposure = 1.08;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 900);
-camera.position.set(0, 5.25, 15.35);
+camera.position.set(0, 3.35, 14.2);
 
 const hemisphere = new THREE.HemisphereLight(0xddeeff, 0x1c1c1c, 2.1);
 scene.add(hemisphere);
@@ -502,11 +506,10 @@ function normalizeImportedCar(source, vehicle) {
         const glassZone = y > (vehicle.truck ? 0.5 : 0.46) && y < 0.84 && z < 0.58;
         const underbody = y < 0.1;
         const bumper = y < 0.42 && z > 0.86;
-        const roofGear = vehicle.truck && y > 0.88;
 
         vertexColor.copy(body);
         if (bumper) vertexColor.copy(metal);
-        if (glassZone || roofGear) vertexColor.copy(glass);
+        if (glassZone) vertexColor.copy(glass);
         if (wheelZone || underbody) vertexColor.copy(rubber);
         colors[index * 3] = vertexColor.r;
         colors[index * 3 + 1] = vertexColor.g;
@@ -585,63 +588,77 @@ function warmVehicleModel(vehicle) {
   return modelCache.get(vehicle.id);
 }
 
-async function createPhotoHybrid(imported, vehicle) {
+async function createVolumetricPhotoCar(imported, vehicle) {
   const texture = await textureLoader.loadAsync(vehicle.photoModel);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
-  // The AI mesh remains in the scene as a real 3D shadow/collision proxy. The
-  // transparent photograph supplies the exact bodywork, accessories and badges.
-  imported.traverse(function (child) {
-    if (!child.isMesh) return;
-    child.material.colorWrite = false;
-    child.material.depthWrite = false;
-    child.castShadow = true;
-  });
-
+  // The photograph is now a fixed rear texture plate on the generated GLB,
+  // not a Sprite. The GLB remains fully visible for roof, sides, wheels,
+  // lighting and shadows. When the car steers, the photo turns with the body
+  // and the real mesh depth appears around it.
   const aspect = texture.image.width / texture.image.height;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    alphaTest: 0.035,
-    depthWrite: false,
-    toneMapped: false,
-  }));
-  sprite.center.set(0.5, vehicle.photoAnchorY);
-  sprite.scale.set(vehicle.photoWidth, vehicle.photoWidth / aspect, 1);
-  sprite.position.set(0, 0.04, 0.5);
-  sprite.renderOrder = 6;
-
-  const contactShadow = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 48),
+  const panelHeight = (vehicle.photoWidth / aspect) * vehicle.photoHeightScale;
+  const rearPanel = new THREE.Mesh(
+    new THREE.PlaneGeometry(vehicle.photoWidth, panelHeight),
     new THREE.MeshBasicMaterial({
-      color: 0x020307,
+      map: texture,
       transparent: true,
-      opacity: 0.38,
-      depthWrite: false,
+      alphaTest: 0.035,
+      depthWrite: true,
+      toneMapped: false,
+      side: THREE.FrontSide,
     }),
   );
-  contactShadow.rotation.x = -Math.PI / 2;
-  contactShadow.scale.set(vehicle.targetWidth * 0.7, vehicle.targetLength * 0.34, 1);
-  contactShadow.position.set(0, 0.025, 0.25);
+  rearPanel.position.set(
+    0,
+    (0.5 - vehicle.photoAnchorY) * panelHeight + 0.04,
+    vehicle.targetLength * 0.51 + 0.035,
+  );
+  rearPanel.renderOrder = 4;
 
-  const hybrid = new THREE.Group();
-  hybrid.add(imported, contactShadow, sprite);
-  hybrid.userData.isPhotoHybrid = true;
-  hybrid.userData.photoSprite = sprite;
-  return hybrid;
+  const wrapper = new THREE.Group();
+  if (vehicle.truck) {
+    imported.traverse(function (child) {
+      if (!child.isMesh) return;
+      child.material.colorWrite = false;
+      child.material.depthWrite = false;
+      child.castShadow = true;
+    });
+    const depthChassis = new THREE.Group();
+    const chassis = new THREE.Mesh(
+      new THREE.BoxGeometry(vehicle.targetWidth * 0.82, 0.52, vehicle.targetLength * 0.82),
+      makeMaterial(0x15191f, 0.34, 0.5),
+    );
+    chassis.position.set(0, 0.72, -0.22);
+    chassis.castShadow = true;
+    chassis.receiveShadow = true;
+    depthChassis.add(chassis);
+    [-1, 1].forEach(function (side) {
+      [-vehicle.wheelBase, vehicle.wheelBase].forEach(function (z) {
+        const wheel = createWheel(vehicle.wheelRadius * 0.96, 0.38);
+        wheel.position.set(side * vehicle.targetWidth * 0.5, vehicle.wheelRadius, z);
+        depthChassis.add(wheel);
+      });
+    });
+    wrapper.add(imported, depthChassis, rearPanel);
+  } else {
+    wrapper.add(imported, rearPanel);
+  }
+  wrapper.userData.isVolumetricPhoto = true;
+  return wrapper;
 }
 
 async function createPlayerVehicle(vehicle) {
   modelStatus.className = "model-status";
-  modelStatus.textContent = "FOTO + AI 3B MODEL YÜKLENİYOR";
+  modelStatus.textContent = "HACİMLİ FOTO-3B MODEL YÜKLENİYOR";
   try {
     const gltf = await warmVehicleModel(vehicle);
     const imported = normalizeImportedCar(gltf.scene, vehicle);
-    const hybrid = await createPhotoHybrid(imported, vehicle);
+    const volumetric = await createVolumetricPhotoCar(imported, vehicle);
     modelStatus.className = "model-status ready";
-    modelStatus.textContent = "FOTO + AI 3B HİBRİT · AKTİF";
-    return hybrid;
+    modelStatus.textContent = "FOTO-DOKULU 3B MODEL · AKTİF";
+    return volumetric;
   } catch (error) {
     console.warn("GLB model yüklenemedi, yerel 3B yedek kullanılıyor.", error);
     modelStatus.className = "model-status warn";
@@ -1017,15 +1034,12 @@ function updateRace(dt, time) {
   if (playerCar) {
     playerCar.position.x = THREE.MathUtils.lerp(playerCar.position.x, race.playerX, 1 - Math.pow(0.0003, dt));
     playerCar.position.y = 0.02 + Math.sin(race.distance * 0.08) * speedRatio * 0.025;
-    playerCar.rotation.y = THREE.MathUtils.lerp(playerCar.rotation.y, -race.steer * 0.13, 1 - Math.pow(0.001, dt));
+    playerCar.rotation.y = THREE.MathUtils.lerp(
+      playerCar.rotation.y,
+      vehicle.viewYaw - race.steer * 0.24,
+      1 - Math.pow(0.001, dt),
+    );
     playerCar.rotation.z = THREE.MathUtils.lerp(playerCar.rotation.z, -race.steer * speedRatio * 0.035, 1 - Math.pow(0.001, dt));
-    if (playerCar.userData.photoSprite) {
-      playerCar.userData.photoSprite.material.rotation = THREE.MathUtils.lerp(
-        playerCar.userData.photoSprite.material.rotation,
-        race.steer * speedRatio * 0.045,
-        1 - Math.pow(0.001, dt),
-      );
-    }
   }
 
   updateWorld(dt, time);
@@ -1099,9 +1113,9 @@ function renderScene(time) {
   const speedRatio = race.speed / race.vehicle.maxSpeed;
   const targetCameraX = race.playerX * 0.72;
   camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCameraX, 0.075);
-  camera.position.y = 5.25 + speedRatio * 0.45 + Math.sin(time * 28) * speedRatio * 0.014;
-  camera.position.z = 15.35 - speedRatio * 0.8;
-  camera.lookAt(race.playerX * 0.34, 0.9, -11.8 - speedRatio * 4);
+  camera.position.y = 3.35 + speedRatio * 0.32 + Math.sin(time * 28) * speedRatio * 0.014;
+  camera.position.z = 14.2 - speedRatio * 0.7;
+  camera.lookAt(race.playerX * 0.34, 0.75, -10.5 - speedRatio * 3.6);
   renderer.render(scene, camera);
 }
 
