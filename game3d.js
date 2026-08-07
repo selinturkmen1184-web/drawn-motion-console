@@ -2817,8 +2817,13 @@ function updateRace(dt, time) {
 
   if (playerCar) {
     playerCar.position.x = THREE.MathUtils.lerp(playerCar.position.x, race.playerX, 1 - Math.pow(0.0003, dt));
-    const roadRumble = race.offRoad ? Math.sin(time * 54) * 0.055 : Math.sin(race.distance * 0.08) * speedRatio * 0.025;
-    playerCar.position.y = 0.02 + roadRumble;
+    // Keep the body planted on asphalt. The previous high-frequency sine wave
+    // moved the entire GLB up and down every frame, which read as model jitter
+    // instead of suspension movement. A small, smoothed response now appears
+    // only after the car actually leaves the paved road.
+    const offRoadBodyMotion = race.offRoad ? Math.sin(time * 34) * 0.026 : 0;
+    const bodyTargetY = 0.02 + offRoadBodyMotion;
+    playerCar.position.y = THREE.MathUtils.lerp(playerCar.position.y, bodyTargetY, 1 - Math.pow(0.0008, dt));
     playerCar.rotation.y = THREE.MathUtils.lerp(
       playerCar.rotation.y,
       vehicle.viewYaw - race.steer * speedRatio * 0.045,
@@ -2968,7 +2973,9 @@ function renderScene(time) {
   const targetCameraX = race.playerX * view.follow;
   const shake = race.impactShake;
   camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCameraX, 0.075) + Math.sin(time * 71) * shake * 0.16;
-  const cameraRumble = Math.sin(time * (race.offRoad ? 48 : 28)) * (speedRatio * 0.014 + (race.offRoad ? 0.035 : 0));
+  // Speed is communicated through FOV and roadside parallax; the chase camera
+  // stays stable on asphalt so the vehicle silhouette remains sharp.
+  const cameraRumble = race.offRoad ? Math.sin(time * 36) * (0.012 + speedRatio * 0.012) : 0;
   camera.position.y = THREE.MathUtils.lerp(camera.position.y, view.y + (race.vehicle.cameraHeightBias || 0) + speedRatio * 0.24, 0.075) + cameraRumble + Math.cos(time * 63) * shake * 0.1;
   camera.position.z = THREE.MathUtils.lerp(camera.position.z, view.z + (race.vehicle.cameraDistanceBias || 0) - speedRatio * 0.58 - (race.boostActive ? 0.32 : 0), 0.075);
   const targetFov = view.fov + speedRatio * 6.5 + (race.boostActive ? 4.5 : 0);
