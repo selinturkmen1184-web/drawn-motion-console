@@ -66,7 +66,7 @@ img { display: block; width: 100%; }
   transition: transform .32s ease, opacity .32s ease;
 }
 .console-bar::after {
-  content: 'LIVE / 32';
+  content: 'LIVE / 33';
   position: absolute;
   left: 50%;
   top: 50%;
@@ -257,14 +257,20 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .map-card.selected .map-check { display: grid; }
 
 .game-screen { position: relative; padding: 0; overflow: hidden; background: #09111c; }
-#gameCanvas { position: absolute; inset: 0; width: 100%; height: 100%; filter: saturate(1.035) contrast(1.035) brightness(1.025); touch-action: none; }
+#gameCanvas { position: absolute; inset: 0; width: 100%; height: 100%; filter: saturate(1.09) contrast(1.065) brightness(1.025); touch-action: none; transition: filter .65s ease; }
+.game-screen[data-route="city"] { --route-glow: 93,221,255; --route-horizon: 43,125,255; }
+.game-screen[data-route="canyon"] { --route-glow: 255,113,82; --route-horizon: 255,183,99; }
+.game-screen[data-route="forest"] { --route-glow: 145,255,199; --route-horizon: 92,182,157; }
+.game-screen[data-route="canyon"] #gameCanvas { filter: saturate(1.16) contrast(1.07) brightness(1.035); }
+.game-screen[data-route="forest"] #gameCanvas { filter: saturate(1.11) contrast(1.075) brightness(1.01); }
 .game-screen::before { content: ''; position: absolute; z-index: 2; inset: 0; pointer-events: none; background: linear-gradient(180deg,rgba(2,6,11,.16),transparent 18%,transparent 76%,rgba(2,5,9,.3)), radial-gradient(ellipse at 50% 45%, transparent 54%, rgba(3,8,14,.09) 74%, rgba(2,5,9,.46) 100%); box-shadow: inset 0 0 92px rgba(0,0,0,.15); transition: .25s ease; }
 .game-screen::after { content: ''; position: absolute; z-index: 2; inset: 0; pointer-events: none; opacity: .006; background: repeating-linear-gradient(0deg, transparent 0 7px, #d4f5ff 7px 8px); mix-blend-mode: screen; }
 .game-screen.boosting::before { background: radial-gradient(ellipse at 50% 45%, transparent 37%, rgba(104,225,255,.07) 64%, rgba(2,7,12,.74) 100%); }
 .game-screen.impact::before { background: radial-gradient(ellipse at 50% 45%, transparent 18%, rgba(255,89,74,.72) 100%); }
 .game-screen.offroad::before { box-shadow: inset 0 0 80px rgba(255,89,74,.18); }
-.drive-effects { --speed-intensity: 0; position: absolute; z-index: 3; inset: 0; overflow: hidden; pointer-events: none; opacity: calc(var(--speed-intensity) * .36); }
-.drive-effects::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(104,225,255,.09), transparent 17% 83%, rgba(104,225,255,.09)); opacity: 0; transition: opacity .2s ease; }
+.drive-effects { --speed-intensity: 0; --cinema-intensity: 0; position: absolute; z-index: 3; inset: 0; overflow: hidden; pointer-events: none; opacity: calc(.24 + var(--speed-intensity) * .5); }
+.drive-effects::before { content: ''; position: absolute; left: -10%; right: -10%; top: 16%; height: 53%; background: radial-gradient(ellipse at 50% 28%, rgba(var(--route-horizon),calc(.04 + var(--cinema-intensity) * .11)), transparent 55%), linear-gradient(180deg,transparent 63%,rgba(var(--route-glow),calc(var(--cinema-intensity) * .055)) 100%); mix-blend-mode: screen; filter: blur(4px); transform: scale(calc(1 + var(--cinema-intensity) * .055)); transition: opacity .25s ease; }
+.drive-effects::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(var(--route-glow),.12), transparent 17% 83%, rgba(var(--route-glow),.12)); opacity: calc(var(--speed-intensity) * .36); transition: opacity .2s ease; }
 .boosting .drive-effects::after { opacity: 1; }
 .drive-effects i { position: absolute; top: 31%; left: 50%; width: 1px; height: clamp(48px,9vh,105px); background: linear-gradient(transparent, rgba(210,245,255,.68)); transform-origin: 50% 230%; animation: speedRush .62s linear infinite; opacity: calc(var(--speed-intensity) * .5); }
 .drive-effects i:nth-child(1){margin-left:-38%;animation-delay:-.08s;transform:rotate(-34deg)}
@@ -276,6 +282,10 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .drive-effects i:nth-child(7){margin-left:29%;animation-delay:-.02s;transform:rotate(27deg)}
 .drive-effects i:nth-child(8){margin-left:39%;animation-delay:-.29s;transform:rotate(36deg)}
 @keyframes speedRush { from { translate:0 -46vh; scale:.25 } to { translate:0 70vh; scale:1.65 } }
+.game-screen.route-moment::before { animation: routeMomentFlash 1.05s cubic-bezier(.18,.7,.12,1); }
+.game-screen.route-moment .drive-effects::before { animation: routeMomentBloom 1.05s cubic-bezier(.18,.7,.12,1); }
+@keyframes routeMomentFlash { 0% { box-shadow: inset 0 0 0 rgba(var(--route-glow),0); } 26% { box-shadow: inset 0 0 120px rgba(var(--route-glow),.22); } 100% { box-shadow: inset 0 0 92px rgba(0,0,0,.15); } }
+@keyframes routeMomentBloom { 0% { filter: blur(4px); opacity: .65; } 30% { filter: blur(10px); opacity: 1; } 100% { filter: blur(4px); opacity: .72; } }
 
 .game-hud { position: absolute; z-index: 4; top: 20px; left: 20px; right: 20px; display: grid; grid-template-columns: 1fr minmax(260px,.75fr) 1fr; align-items: start; pointer-events: none; }
 .hud-left { display: flex; gap: 8px; }

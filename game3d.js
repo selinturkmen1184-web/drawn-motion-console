@@ -287,7 +287,8 @@ const world = new THREE.Group();
 const roadWorld = new THREE.Group();
 const trafficWorld = new THREE.Group();
 const collectibleWorld = new THREE.Group();
-world.add(roadWorld, trafficWorld, collectibleWorld);
+const atmosphereWorld = new THREE.Group();
+world.add(roadWorld, trafficWorld, collectibleWorld, atmosphereWorld);
 scene.add(world);
 
 const SEGMENT_LENGTH = 42;
@@ -298,6 +299,9 @@ const WORLD_SCALE = 0.24;
 const roadSegments = [];
 const trafficCars = [];
 const collectibleCards = [];
+const atmosphereLayers = [];
+const routeLandmarks = [];
+const animatedLandmarkMaterials = [];
 let playerCar = null;
 let currentMapTheme = null;
 
@@ -1743,10 +1747,15 @@ function createRoadsideMotionProps(side, index, map) {
     }
     const warningPost = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.85, 0.1), metal);
     warningPost.position.set(side * 11.1, 0.92, 4.4);
-    const warning = new THREE.Mesh(new THREE.CylinderGeometry(0, 0.65, 1.15, 3), glow);
+    const warning = new THREE.Mesh(
+      new THREE.CylinderGeometry(0, 0.65, 1.15, 3),
+      new THREE.MeshStandardMaterial({ color: 0x55251d, emissive: 0x35110c, emissiveIntensity: 0.38, roughness: 0.66, metalness: 0.18 }),
+    );
     warning.position.set(side * 11.1, 1.72, 4.34);
     warning.rotation.z = side * Math.PI / 2;
-    group.add(warningPost, warning);
+    const warningLamp = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), glow);
+    warningLamp.position.set(side * 11.1, 2.22, 4.18);
+    group.add(warningPost, warning, warningLamp);
   } else {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 2.2, 10), getSceneryMaterial("motion-log", function () {
       return makeMaterial(0x4a3022, 0.96, 0);
@@ -1756,19 +1765,265 @@ function createRoadsideMotionProps(side, index, map) {
     trunk.castShadow = true;
     const routePost = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.1, 0.1), metal);
     routePost.position.set(side * 10.95, 1.04, 4.3);
-    const routePanel = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.68, 0.11), glow);
+    const routePanel = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 0.68, 0.11),
+      new THREE.MeshStandardMaterial({ color: 0x172c25, emissive: 0x071b14, emissiveIntensity: 0.44, roughness: 0.5, metalness: 0.24 }),
+    );
     routePanel.position.set(side * 10.95, 1.76, 4.3);
-    group.add(trunk, routePost, routePanel);
+    const routeStripe = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.055, 0.025), glow);
+    routeStripe.position.set(side * 10.95, 1.81, 4.368);
+    const routeCode = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.045, 0.026), glow);
+    routeCode.position.set(side * 11.16, 1.63, 4.369);
+    group.add(trunk, routePost, routePanel, routeStripe, routeCode);
   }
   group.position.z = -13 + (index * 11) % 26;
   group.userData.baseZ = group.position.z;
   return group;
 }
 
+function disposeAtmosphere() {
+  atmosphereWorld.traverse(function (object) {
+    if (object.geometry) object.geometry.dispose();
+    if (object.material) object.material.dispose();
+  });
+  atmosphereWorld.clear();
+  atmosphereLayers.length = 0;
+}
+
+function buildAtmosphere(map) {
+  disposeAtmosphere();
+  const isCity = map.scenery === "city";
+  const layerCount = isCity ? 2 : 3;
+  for (let layerIndex = 0; layerIndex < layerCount; layerIndex += 1) {
+    const count = isCity ? 150 - layerIndex * 34 : 210 - layerIndex * 35;
+    if (isCity) {
+      const positions = new Float32Array(count * 6);
+      for (let index = 0; index < count; index += 1) {
+        const offset = index * 6;
+        const x = (Math.random() - 0.5) * (42 + layerIndex * 18);
+        const y = 1.2 + Math.random() * 19;
+        const z = 18 - Math.random() * 330;
+        positions[offset] = x;
+        positions[offset + 1] = y;
+        positions[offset + 2] = z;
+        positions[offset + 3] = x - 0.09;
+        positions[offset + 4] = y + 0.65 + layerIndex * 0.24;
+        positions[offset + 5] = z - 0.72 - layerIndex * 0.35;
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const material = new THREE.LineBasicMaterial({
+        color: layerIndex ? 0x8bb9d3 : 0xd6f2ff,
+        transparent: true,
+        opacity: layerIndex ? 0.13 : 0.23,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const rain = new THREE.LineSegments(geometry, material);
+      rain.frustumCulled = false;
+      rain.userData.kind = "rain";
+      rain.userData.layer = layerIndex;
+      atmosphereWorld.add(rain);
+      atmosphereLayers.push(rain);
+    } else {
+      const positions = new Float32Array(count * 3);
+      const phases = new Float32Array(count);
+      for (let index = 0; index < count; index += 1) {
+        const offset = index * 3;
+        positions[offset] = (Math.random() - 0.5) * (48 + layerIndex * 17);
+        positions[offset + 1] = 0.35 + Math.random() * (map.scenery === "forest" ? 12 : 8);
+        positions[offset + 2] = 18 - Math.random() * 350;
+        phases[index] = Math.random() * Math.PI * 2;
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const material = new THREE.PointsMaterial({
+        color: map.scenery === "canyon" ? (layerIndex ? 0xffbe7a : 0xffe1b3) : (layerIndex ? 0x9bd7be : 0xe0fff0),
+        size: (map.scenery === "canyon" ? 0.11 : 0.085) + layerIndex * 0.045,
+        transparent: true,
+        opacity: 0.28 - layerIndex * 0.045,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true,
+      });
+      const particles = new THREE.Points(geometry, material);
+      particles.frustumCulled = false;
+      particles.userData.kind = map.scenery === "canyon" ? "dust" : "pollen";
+      particles.userData.layer = layerIndex;
+      particles.userData.phases = phases;
+      atmosphereWorld.add(particles);
+      atmosphereLayers.push(particles);
+    }
+  }
+}
+
+function createRouteLandmark(map, index) {
+  const landmark = new THREE.Group();
+  landmark.userData.isRouteLandmark = true;
+  landmark.userData.seed = index;
+  landmark.userData.lastAnnouncedCycle = -1;
+  const structure = new THREE.MeshStandardMaterial({
+    color: map.scenery === "city" ? 0x182837 : map.scenery === "canyon" ? 0x793f2c : 0x263d34,
+    roughness: map.scenery === "city" ? 0.36 : 0.86,
+    metalness: map.scenery === "city" ? 0.7 : 0.08,
+  });
+  const glow = new THREE.MeshStandardMaterial({
+    color: map.accent,
+    emissive: map.accent,
+    emissiveIntensity: map.scenery === "city" ? 5.2 : 2.8,
+    roughness: 0.2,
+    metalness: 0.25,
+  });
+  glow.userData.baseIntensity = glow.emissiveIntensity;
+  glow.userData.phase = index * 0.71;
+  animatedLandmarkMaterials.push(glow);
+
+  if (map.scenery === "city") {
+    landmark.userData.label = index % 2 ? "AURORA GATE" : "NEON DISTRICT";
+    [-1, 1].forEach(function (side) {
+      const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.78, 7.5, 1.15), structure);
+      pylon.position.set(side * 10.25, 3.62, 0);
+      pylon.castShadow = true;
+      landmark.add(pylon);
+      [1.2, 3.15, 5.15].forEach(function (height, stripIndex) {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.09, 1.3), glow);
+        strip.position.set(side * 10.25, height, stripIndex % 2 ? 0.18 : -0.18);
+        landmark.add(strip);
+      });
+    });
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(20.4, 0.45, 1.18), structure);
+    crown.position.y = 7.08;
+    crown.castShadow = true;
+    landmark.add(crown);
+    for (let stripIndex = -4; stripIndex <= 4; stripIndex += 1) {
+      const crownLight = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.1, 1.32), glow);
+      crownLight.position.set(stripIndex * 2.05, 6.82, 0);
+      landmark.add(crownLight);
+    }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.07, 8, 46), glow);
+    ring.position.set(index % 2 ? -3.25 : 3.25, 6.02, -0.7);
+    ring.userData.spin = true;
+    landmark.add(ring);
+  } else if (map.scenery === "canyon") {
+    landmark.userData.label = index % 2 ? "SUNSTONE ARCH" : "RED ROCK GATE";
+    const rockTextures = getCanyonRockTextures();
+    structure.map = rockTextures.color;
+    structure.bumpMap = rockTextures.relief;
+    structure.bumpScale = 0.16;
+    [-1, 1].forEach(function (side) {
+      for (let level = 0; level < 3; level += 1) {
+        const pillarRock = new THREE.Mesh(sceneryGeometry.rock, structure);
+        pillarRock.scale.set(3.4 - level * 0.42, 2.8, 2.25);
+        pillarRock.position.set(side * (10.3 - level * 0.45), 1.7 + level * 2.05, level % 2 ? 0.35 : -0.3);
+        pillarRock.rotation.set(level * 0.12, side * (0.45 + level * 0.22), side * level * 0.08);
+        pillarRock.castShadow = true;
+        landmark.add(pillarRock);
+      }
+    });
+    for (let span = -3; span <= 3; span += 1) {
+      const archRock = new THREE.Mesh(sceneryGeometry.rock, structure);
+      archRock.scale.set(2.05, 1.35 + Math.abs(span) * 0.08, 2.05);
+      archRock.position.set(span * 2.55, 8.15 - Math.abs(span) * 0.13, Math.sin(span) * 0.22);
+      archRock.rotation.set(0.1 * span, span * 0.42, span * -0.06);
+      archRock.castShadow = true;
+      landmark.add(archRock);
+    }
+    [-6.4, 6.4].forEach(function (x) {
+      const marker = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.25, 10), glow);
+      marker.position.set(x, 6.35, -1.65);
+      landmark.add(marker);
+    });
+  } else {
+    landmark.userData.label = index % 2 ? "EVERGREEN PASS" : "ALPINE LIGHT GATE";
+    [-1, 1].forEach(function (side) {
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(0.62, 6.8, 0.82), structure);
+      tower.position.set(side * 9.85, 3.3, 0);
+      tower.castShadow = true;
+      landmark.add(tower);
+      for (let braceIndex = 0; braceIndex < 3; braceIndex += 1) {
+        const brace = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 0.36), structure);
+        brace.position.set(side * 9.45, 1.4 + braceIndex * 1.85, 0);
+        brace.rotation.z = side * (braceIndex % 2 ? -0.4 : 0.4);
+        landmark.add(brace);
+      }
+      const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), glow);
+      lantern.position.set(side * 8.85, 5.72, 0.24);
+      landmark.add(lantern);
+    });
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(20, 0.54, 0.82), structure);
+    beam.position.y = 6.55;
+    beam.castShadow = true;
+    landmark.add(beam);
+    [-6, -3, 0, 3, 6].forEach(function (x, lightIndex) {
+      const light = new THREE.Mesh(new THREE.SphereGeometry(0.14 + (lightIndex % 2) * 0.03, 12, 8), glow);
+      light.position.set(x, 6.12, 0.42);
+      landmark.add(light);
+    });
+  }
+
+  landmark.position.z = -2;
+  landmark.userData.baseZ = landmark.position.z;
+  routeLandmarks.push(landmark);
+  return landmark;
+}
+
+function updateAtmosphere(dt, time, travel) {
+  atmosphereLayers.forEach(function (layer) {
+    const positions = layer.geometry.attributes.position.array;
+    if (layer.userData.kind === "rain") {
+      for (let offset = 0; offset < positions.length; offset += 6) {
+        positions[offset + 1] -= dt * (7.5 + layer.userData.layer * 2.1);
+        positions[offset + 4] -= dt * (7.5 + layer.userData.layer * 2.1);
+        positions[offset + 2] += travel * (1.35 + layer.userData.layer * 0.18);
+        positions[offset + 5] += travel * (1.35 + layer.userData.layer * 0.18);
+        if (positions[offset + 2] > 24 || positions[offset + 1] < 0.15) {
+          const x = (Math.random() - 0.5) * (44 + layer.userData.layer * 18);
+          const y = 8 + Math.random() * 14;
+          const z = -240 - Math.random() * 110;
+          positions[offset] = x;
+          positions[offset + 1] = y;
+          positions[offset + 2] = z;
+          positions[offset + 3] = x - 0.09;
+          positions[offset + 4] = y + 0.65 + layer.userData.layer * 0.24;
+          positions[offset + 5] = z - 0.72 - layer.userData.layer * 0.35;
+        }
+      }
+    } else {
+      const phases = layer.userData.phases;
+      for (let offset = 0, point = 0; offset < positions.length; offset += 3, point += 1) {
+        positions[offset + 2] += travel * (0.78 + layer.userData.layer * 0.12);
+        positions[offset] += Math.sin(time * 0.65 + phases[point]) * dt * (layer.userData.kind === "dust" ? 0.34 : 0.18);
+        positions[offset + 1] += Math.sin(time * 0.9 + phases[point] * 1.7) * dt * 0.08;
+        if (positions[offset + 2] > 24) {
+          positions[offset + 2] = -300 - Math.random() * 70;
+          positions[offset] = (Math.random() - 0.5) * (50 + layer.userData.layer * 16);
+          positions[offset + 1] = 0.35 + Math.random() * (layer.userData.kind === "dust" ? 8 : 12);
+        }
+      }
+    }
+    layer.geometry.attributes.position.needsUpdate = true;
+  });
+}
+
+function triggerRouteMoment(landmark) {
+  const race = state.race;
+  if (!race || race.finishPending || race.finished) return;
+  race.visualPulse = 1;
+  addScore(180, 0.05);
+  showToast(landmark.userData.label + " · ROUTE MOMENT", false, "◇");
+  screens.game.classList.remove("route-moment");
+  void screens.game.offsetWidth;
+  screens.game.classList.add("route-moment");
+  window.setTimeout(function () { screens.game.classList.remove("route-moment"); }, 1100);
+}
+
 function buildRoad(map) {
   roadWorld.clear();
   roadSegments.length = 0;
+  routeLandmarks.length = 0;
+  animatedLandmarkMaterials.length = 0;
   currentMapTheme = map.id;
+  buildAtmosphere(map);
   applyMapBackdrop(map);
   scene.environment = createReflectionEnvironment(map);
   scene.fog = new THREE.FogExp2(map.fog, map.fogDensity);
@@ -1976,6 +2231,12 @@ function buildRoad(map) {
       segment.add(gantry);
     }
 
+    if (index % 5 === 3) {
+      const landmark = createRouteLandmark(map, index);
+      segment.userData.landmark = landmark;
+      segment.add(landmark);
+    }
+
     roadWorld.add(segment);
     roadSegments.push(segment);
   }
@@ -2141,6 +2402,7 @@ async function startRace() {
     cleanRun: true,
     finishPending: false,
     impactShake: 0,
+    visualPulse: 0,
     offRoad: false,
     pages: new Set(),
     lastTime: performance.now(),
@@ -2161,6 +2423,7 @@ async function startRace() {
   }).join("");
   updateHud();
   showScreen("game");
+  screens.game.dataset.route = map.id;
   screens.game.classList.remove("boosting", "impact", "offroad", "orbiting");
   pausePanel.classList.remove("show");
   if (currentMapTheme !== map.id) buildRoad(map);
@@ -2391,8 +2654,28 @@ function recycleTraffic(car, index) {
 function updateWorld(dt, time) {
   const race = state.race;
   const travel = race.speed * dt * WORLD_SCALE;
+  updateAtmosphere(dt, time, travel);
+  animatedLandmarkMaterials.forEach(function (material) {
+    const pulse = 0.82 + Math.sin(time * 2.5 + material.userData.phase) * 0.18;
+    material.emissiveIntensity = material.userData.baseIntensity * pulse + race.visualPulse * 2.2;
+  });
+  routeLandmarks.forEach(function (landmark) {
+    landmark.children.forEach(function (child) {
+      if (child.userData.spin) child.rotation.z = time * 0.42 + landmark.userData.seed;
+    });
+  });
   roadSegments.forEach(function (segment) {
+    const previousSegmentZ = segment.position.z;
     segment.position.z += travel;
+    const landmark = segment.userData.landmark;
+    if (landmark) {
+      const previousLandmarkZ = previousSegmentZ + landmark.position.z;
+      const landmarkZ = segment.position.z + landmark.position.z;
+      if (previousLandmarkZ <= -48 && landmarkZ > -48 && landmark.userData.lastAnnouncedCycle !== segment.userData.cycle) {
+        landmark.userData.lastAnnouncedCycle = segment.userData.cycle;
+        triggerRouteMoment(landmark);
+      }
+    }
     if (segment.position.z > 37) {
       segment.position.z -= SEGMENT_LENGTH * SEGMENT_COUNT;
       segment.userData.cycle = (segment.userData.cycle || 0) + 1;
@@ -2525,10 +2808,12 @@ function updateRace(dt, time) {
   if (race.comboTimer <= 0) race.combo = THREE.MathUtils.lerp(race.combo, 1, 1 - Math.pow(0.05, dt));
   race.collisionCooldown = Math.max(0, race.collisionCooldown - dt);
   race.impactShake = Math.max(0, race.impactShake - dt * 3.8);
+  race.visualPulse = Math.max(0, race.visualPulse - dt * 0.9);
 
   screens.game.classList.toggle("boosting", race.boostActive);
   screens.game.classList.toggle("offroad", race.offRoad);
   driveEffects.style.setProperty("--speed-intensity", Math.max(0, Math.min(1, (speedRatio - 0.46) / 0.54)).toFixed(3));
+  driveEffects.style.setProperty("--cinema-intensity", Math.max(speedRatio * 0.72, race.visualPulse).toFixed(3));
 
   if (playerCar) {
     playerCar.position.x = THREE.MathUtils.lerp(playerCar.position.x, race.playerX, 1 - Math.pow(0.0003, dt));
@@ -2648,6 +2933,14 @@ function renderScene(time) {
   const race = state.race;
   if (!race) return;
   const speedRatio = THREE.MathUtils.clamp(race.speed / race.vehicle.maxSpeed, 0, 1.2);
+  const scenery = race.map.scenery;
+  const baseExposure = scenery === "city" ? 1.12 : scenery === "canyon" ? 1.06 : 1.1;
+  renderer.toneMappingExposure = baseExposure + speedRatio * 0.035 + race.visualPulse * 0.09 + Math.sin(time * 0.22) * 0.012;
+  if (scene.fog && scene.fog.isFogExp2) {
+    scene.fog.density = race.map.fogDensity * (1 - Math.min(0.12, speedRatio * 0.09) + Math.sin(time * 0.16) * 0.015);
+  }
+  roadFill.intensity = (scenery === "city" ? 1.55 : 0.95) + race.visualPulse * 0.65 + Math.sin(time * 0.7) * 0.04;
+  vehicleRim.intensity = (scenery === "city" ? 1.45 : 1.05) + race.visualPulse * 0.8;
   if (race.orbitCamera) {
     const orbitDt = Math.min(0.05, Math.max(0, time - race.orbitLastTime));
     race.orbitLastTime = time;
