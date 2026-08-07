@@ -66,7 +66,7 @@ img { display: block; width: 100%; }
   transition: transform .32s ease, opacity .32s ease;
 }
 .console-bar::after {
-  content: 'LIVE / 35';
+  content: 'LIVE / 36';
   position: absolute;
   left: 50%;
   top: 50%;
@@ -244,8 +244,8 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .map-visual::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,9,14,.06), rgba(5,9,14,.82)), linear-gradient(135deg, rgba(104,225,255,.08), transparent 45%); }
 .map-visual > span { position: absolute; z-index: 2; top: 15px; left: 16px; color: rgba(255,255,255,.7); font: 600 8px/1 var(--mono); letter-spacing: .14em; }
 .city-map { background-image: url('./maps/neon-city-photo-v1.jpg'); }
-.canyon-map { background-image: linear-gradient(180deg,rgba(16,12,9,.03),rgba(54,28,16,.18)),url('./maps/red-rock-traffic-v35.jpg'); }
-.forest-map { background-image: linear-gradient(180deg,rgba(8,18,20,.02),rgba(13,28,25,.2)),url('./maps/alpine-traffic-v35.jpg'); }
+.canyon-map { background-image: linear-gradient(180deg,rgba(16,12,9,.01),rgba(54,28,16,.12)),url('./maps/red-rock-cinematic-v36.jpg'); }
+.forest-map { background-image: linear-gradient(180deg,rgba(8,18,20,.01),rgba(13,28,25,.14)),url('./maps/alpine-cinematic-v36.jpg'); }
 .city-map > div, .canyon-map > div, .forest-map > div, .canyon-map::before, .canyon-map::after { display: none; }
 .map-copy { position: relative; height: 37%; padding: 18px 19px; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(100deg, rgba(104,225,255,.025), transparent); }
 .map-copy::before { content: ''; position: absolute; top: 0; left: 19px; width: 36px; height: 1px; background: var(--electric); }
@@ -261,10 +261,13 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .game-screen[data-route="city"] { --route-glow: 93,221,255; --route-horizon: 43,125,255; }
 .game-screen[data-route="canyon"] { --route-glow: 255,113,82; --route-horizon: 255,183,99; }
 .game-screen[data-route="forest"] { --route-glow: 145,255,199; --route-horizon: 92,182,157; }
-.game-screen[data-route="canyon"] #gameCanvas { filter: saturate(1.16) contrast(1.07) brightness(1.035); }
-.game-screen[data-route="forest"] #gameCanvas { filter: saturate(1.11) contrast(1.075) brightness(1.01); }
+.game-screen[data-route="canyon"] #gameCanvas { filter: saturate(1.12) contrast(1.105) brightness(1.035); }
+.game-screen[data-route="forest"] #gameCanvas { filter: saturate(1.08) contrast(1.105) brightness(1.015); }
 .game-screen::before { content: ''; position: absolute; z-index: 2; inset: 0; pointer-events: none; background: linear-gradient(180deg,rgba(2,6,11,.16),transparent 18%,transparent 76%,rgba(2,5,9,.3)), radial-gradient(ellipse at 50% 45%, transparent 54%, rgba(3,8,14,.09) 74%, rgba(2,5,9,.46) 100%); box-shadow: inset 0 0 92px rgba(0,0,0,.15); transition: .25s ease; }
 .game-screen::after { content: ''; position: absolute; z-index: 2; inset: 0; pointer-events: none; opacity: .006; background: repeating-linear-gradient(0deg, transparent 0 7px, #d4f5ff 7px 8px); mix-blend-mode: screen; }
+.game-screen[data-route="canyon"]::before { background: radial-gradient(circle at 86% 28%,rgba(255,222,151,.26),rgba(255,154,77,.08) 17%,transparent 38%),linear-gradient(180deg,rgba(16,8,3,.06),transparent 24%,transparent 71%,rgba(17,7,3,.32)),radial-gradient(ellipse at 50% 48%,transparent 51%,rgba(22,8,3,.12) 75%,rgba(8,3,1,.47) 100%); box-shadow: inset 0 0 118px rgba(40,13,3,.18); mix-blend-mode: normal; }
+.game-screen[data-route="forest"]::before { background: radial-gradient(circle at 51% 37%,rgba(255,231,174,.2),rgba(157,205,210,.07) 18%,transparent 39%),linear-gradient(180deg,rgba(4,13,19,.1),transparent 28%,transparent 70%,rgba(3,9,12,.35)),radial-gradient(ellipse at 50% 47%,transparent 49%,rgba(3,14,16,.14) 72%,rgba(2,7,10,.52) 100%); box-shadow: inset 0 0 128px rgba(1,13,17,.22); mix-blend-mode: normal; }
+.game-screen[data-route="canyon"]::after,.game-screen[data-route="forest"]::after { opacity: .12; background: radial-gradient(ellipse at 50% 56%,rgba(var(--route-horizon),.08),transparent 52%),repeating-radial-gradient(circle at 20% 30%,rgba(255,255,255,.08) 0 1px,transparent 1px 7px); background-size:auto,180px 180px; mix-blend-mode:screen; mask-image:linear-gradient(180deg,rgba(0,0,0,.8),transparent 62%); }
 .game-screen.boosting::before { background: radial-gradient(ellipse at 50% 45%, transparent 37%, rgba(104,225,255,.07) 64%, rgba(2,7,12,.74) 100%); }
 .game-screen.impact::before { background: radial-gradient(ellipse at 50% 45%, transparent 18%, rgba(255,89,74,.72) 100%); }
 .game-screen.offroad::before { box-shadow: inset 0 0 80px rgba(255,89,74,.18); }

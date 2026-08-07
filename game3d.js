@@ -97,16 +97,16 @@ const maps = {
     timeLimit: 70,
     pages: [510, 1120, 1800, 2470],
     pageLanes: [1, -1, 0, 1],
-    sky: 0xc28a68,
-    fog: 0xb07d5e,
-    fogDensity: 0.0038,
+    sky: 0xc98255,
+    fog: 0x8d6750,
+    fogDensity: 0.00265,
     road: 0x211c1b,
-    shoulder: 0x79513c,
+    shoulder: 0x694433,
     line: 0xffe7c0,
     accent: 0xff7152,
     traffic: 7,
     scenery: "canyon",
-    backdrop: "./maps/red-rock-traffic-v35.jpg",
+    backdrop: "./maps/red-rock-cinematic-v36.jpg",
   },
   forest: {
     id: "forest",
@@ -115,16 +115,16 @@ const maps = {
     timeLimit: 72,
     pages: [390, 1050, 1720, 2310],
     pageLanes: [0, 1, -1, 0],
-    sky: 0x8da0a4,
-    fog: 0x64787a,
-    fogDensity: 0.0052,
+    sky: 0x8295a2,
+    fog: 0x52636d,
+    fogDensity: 0.00365,
     road: 0x162024,
-    shoulder: 0x26382f,
+    shoulder: 0x1f3329,
     line: 0xdcefdc,
     accent: 0x91ffc7,
     traffic: 8,
     scenery: "forest",
-    backdrop: "./maps/alpine-traffic-v35.jpg",
+    backdrop: "./maps/alpine-cinematic-v36.jpg",
   },
 };
 
@@ -320,6 +320,7 @@ let asphaltTexture = null;
 let asphaltReliefTexture = null;
 let canyonRockTexture = null;
 let canyonRockReliefTexture = null;
+let softParticleTexture = null;
 const sceneryMaterials = new Map();
 const sceneryGeometry = {
   cube: new THREE.BoxGeometry(1, 1, 1),
@@ -690,24 +691,30 @@ function applyMapBackdrop(map) {
     const drawWidth = sourceRatio > targetRatio ? backdropCanvas.height * sourceRatio : backdropCanvas.width;
     context.drawImage(source, (backdropCanvas.width - drawWidth) * 0.5, (backdropCanvas.height - drawHeight) * 0.42, drawWidth, drawHeight);
 
-    // The reference photo now provides only the remote sky and horizon. Its
-    // static foreground is dissolved into fog so every nearby object comes
-    // from the moving 3D road segments instead of a frozen photograph.
+    // Natural routes keep more of their cinematic valley walls visible while
+    // the lower road corridor still dissolves into the moving 3D asphalt.
+    // City retains the stronger masking used by its dense realtime skyline.
     const fogColor = new THREE.Color(map.fog);
     const red = Math.round(fogColor.r * 255);
     const green = Math.round(fogColor.g * 255);
     const blue = Math.round(fogColor.b * 255);
-    const lowerMask = context.createLinearGradient(0, backdropCanvas.height * 0.38, 0, backdropCanvas.height);
+    const naturalRoute = map.scenery !== "city";
+    const lowerMask = context.createLinearGradient(
+      0,
+      backdropCanvas.height * (naturalRoute ? 0.53 : 0.38),
+      0,
+      backdropCanvas.height,
+    );
     lowerMask.addColorStop(0, "rgba(" + red + "," + green + "," + blue + ",0)");
-    lowerMask.addColorStop(0.42, "rgba(" + red + "," + green + "," + blue + ",.72)");
-    lowerMask.addColorStop(1, "rgba(" + red + "," + green + "," + blue + ",1)");
+    lowerMask.addColorStop(naturalRoute ? 0.48 : 0.42, "rgba(" + red + "," + green + "," + blue + "," + (naturalRoute ? ".28" : ".72") + ")");
+    lowerMask.addColorStop(1, "rgba(" + red + "," + green + "," + blue + "," + (naturalRoute ? ".86" : "1") + ")");
     context.fillStyle = lowerMask;
     context.fillRect(0, 0, backdropCanvas.width, backdropCanvas.height);
     const sideMask = context.createLinearGradient(0, 0, backdropCanvas.width, 0);
-    sideMask.addColorStop(0, "rgba(" + red + "," + green + "," + blue + ",.7)");
+    sideMask.addColorStop(0, "rgba(" + red + "," + green + "," + blue + "," + (naturalRoute ? ".12" : ".7") + ")");
     sideMask.addColorStop(0.26, "rgba(" + red + "," + green + "," + blue + ",0)");
     sideMask.addColorStop(0.74, "rgba(" + red + "," + green + "," + blue + ",0)");
-    sideMask.addColorStop(1, "rgba(" + red + "," + green + "," + blue + ",.7)");
+    sideMask.addColorStop(1, "rgba(" + red + "," + green + "," + blue + "," + (naturalRoute ? ".12" : ".7") + ")");
     context.fillStyle = sideMask;
     context.fillRect(0, 0, backdropCanvas.width, backdropCanvas.height);
 
@@ -756,6 +763,24 @@ function createTerrainTexture(map) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   return texture;
+}
+
+function getSoftParticleTexture() {
+  if (softParticleTexture) return softParticleTexture;
+  const particleCanvas = document.createElement("canvas");
+  particleCanvas.width = 64;
+  particleCanvas.height = 64;
+  const context = particleCanvas.getContext("2d");
+  const glow = context.createRadialGradient(32, 32, 1, 32, 32, 30);
+  glow.addColorStop(0, "rgba(255,255,255,1)");
+  glow.addColorStop(0.24, "rgba(255,255,255,.72)");
+  glow.addColorStop(0.62, "rgba(255,255,255,.18)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = glow;
+  context.fillRect(0, 0, 64, 64);
+  softParticleTexture = new THREE.CanvasTexture(particleCanvas);
+  softParticleTexture.colorSpace = THREE.SRGBColorSpace;
+  return softParticleTexture;
 }
 
 function getCityFacadeTexture() {
@@ -1640,7 +1665,7 @@ function createCanyonScenery(side, index) {
   // The distant cliff mass now comes from the photographic horizon. Nearby
   // geometry is deliberately lower and irregular so it reads as real roadside
   // geology instead of a row of repeated cylinders.
-  const rockCount = index % 3 === 0 ? 1 : 0;
+  const rockCount = 0;
   for (let rockIndex = 0; rockIndex < rockCount; rockIndex += 1) {
     const rock = new THREE.Mesh(sceneryGeometry.rock, rockMaterials[(index + rockIndex) % rockMaterials.length]);
     const scale = 0.72 + ((index * 3 + rockIndex * 5) % 5) * 0.17;
@@ -1718,10 +1743,10 @@ function createForestScenery(side, index) {
   // Three crossed branch-texture planes form a detailed, camera-safe tree.
   // Unlike the old single repeated silhouette, height, width, colour and
   // rotation vary per cluster while the geometry continues to move in 3D.
-  const treeCount = 2 + (index % 2);
+  const treeCount = 1 + (index % 2);
   for (let treeIndex = 0; treeIndex < treeCount; treeIndex += 1) {
     const height = 6.8 + ((index * 7 + treeIndex * 5) % 8) * 0.62;
-    const width = height * (0.43 + ((index + treeIndex) % 3) * 0.026);
+    const width = height * (0.47 + ((index + treeIndex) % 3) * 0.03);
     const tree = new THREE.Group();
     const trunk = new THREE.Mesh(sceneryGeometry.trunk, trunkMaterial);
     trunk.scale.set(1.15, height * 0.34, 1.15);
@@ -1746,7 +1771,8 @@ function createForestScenery(side, index) {
     group.add(tree);
   }
 
-  for (let rockIndex = 0; rockIndex < 2; rockIndex += 1) {
+  const forestRockCount = index % 3 === 0 ? 1 : 0;
+  for (let rockIndex = 0; rockIndex < forestRockCount; rockIndex += 1) {
     const rock = new THREE.Mesh(sceneryGeometry.rock, stoneMaterials[(index + rockIndex) % 2]);
     const rockScale = 0.55 + ((index + rockIndex * 3) % 4) * 0.18;
     rock.scale.set(rockScale * 1.28, rockScale * 0.62, rockScale);
@@ -1755,7 +1781,8 @@ function createForestScenery(side, index) {
     rock.castShadow = rockIndex === 0;
     group.add(rock);
   }
-  for (let shrubIndex = 0; shrubIndex < 3; shrubIndex += 1) {
+  const forestShrubCount = index % 2 ? 1 : 0;
+  for (let shrubIndex = 0; shrubIndex < forestShrubCount; shrubIndex += 1) {
     const shrub = new THREE.Mesh(sceneryGeometry.shrub, undergrowthMaterials[(index + shrubIndex) % 2]);
     const shrubScale = 0.5 + ((index + shrubIndex) % 3) * 0.14;
     shrub.scale.set(shrubScale * 1.3, shrubScale * 0.65, shrubScale);
@@ -1802,7 +1829,7 @@ function createRoadsideMotionProps(side, index, map) {
         flatShading: true,
       });
     });
-    const roadsideRockCount = index % 4 === 0 ? 1 : 0;
+    const roadsideRockCount = 0;
     for (let item = 0; item < roadsideRockCount; item += 1) {
       const rock = new THREE.Mesh(sceneryGeometry.rock, roadsideRockMaterial);
       const size = 0.58 + ((index + item * 3) % 4) * 0.16;
@@ -1900,9 +1927,11 @@ function buildAtmosphere(map) {
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       const material = new THREE.PointsMaterial({
         color: map.scenery === "canyon" ? (layerIndex ? 0xffbe7a : 0xffe1b3) : (layerIndex ? 0x9bd7be : 0xe0fff0),
-        size: (map.scenery === "canyon" ? 0.11 : 0.085) + layerIndex * 0.045,
+        map: getSoftParticleTexture(),
+        alphaMap: getSoftParticleTexture(),
+        size: (map.scenery === "canyon" ? 0.09 : 0.072) + layerIndex * 0.035,
         transparent: true,
-        opacity: 0.28 - layerIndex * 0.045,
+        opacity: 0.22 - layerIndex * 0.035,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         sizeAttenuation: true,
@@ -1971,46 +2000,34 @@ function createRouteLandmark(map, index) {
     structure.map = rockTextures.color;
     structure.bumpMap = rockTextures.relief;
     structure.bumpScale = 0.16;
-    [-1, 1].forEach(function (side) {
-      const pillar = new THREE.Mesh(sceneryGeometry.rock, structure);
-      pillar.scale.set(side < 0 ? 2.85 : 2.35, side < 0 ? 4.25 : 3.65, side < 0 ? 2.25 : 2.65);
-      pillar.position.set(side * (side < 0 ? 12.7 : 13.4), side < 0 ? 3.08 : 2.72, side < 0 ? -1.2 : 1.55);
-      pillar.rotation.set(0.06, side * 0.48, side * 0.05);
-      pillar.castShadow = true;
-      const shoulderRock = new THREE.Mesh(sceneryGeometry.rock, structure);
-      shoulderRock.scale.set(2.05, 2.25, 1.9);
-      shoulderRock.position.set(side * (side < 0 ? 15.4 : 16.1), side < 0 ? 1.45 : 1.68, side < 0 ? 2.2 : -1.7);
-      shoulderRock.rotation.set(-0.08, side * 0.82, side * -0.09);
-      shoulderRock.castShadow = true;
-      const marker = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.25, 10), glow);
-      marker.position.set(side * 10.25, 2.25, -1.2);
-      landmark.add(pillar, shoulderRock, marker);
-    });
+    // One-sided, irregular outcrops avoid the artificial mirrored gateway
+    // silhouette while still creating a memorable moving landmark.
+    const cliffSide = index % 2 ? -1 : 1;
+    const ledge = new THREE.Mesh(sceneryGeometry.rock, structure);
+    ledge.scale.set(5.6, 1.35, 4.8);
+    ledge.position.set(cliffSide * 20.4, 0.58, 1.4);
+    ledge.rotation.set(-0.06, cliffSide * 0.91, cliffSide * -0.12);
+    ledge.castShadow = true;
+    const lowerLedge = new THREE.Mesh(sceneryGeometry.rock, structure);
+    lowerLedge.scale.set(3.4, 0.88, 3.25);
+    lowerLedge.position.set(cliffSide * 16.8, 0.36, -2.2);
+    lowerLedge.rotation.set(0.08, cliffSide * 0.44, cliffSide * 0.08);
+    lowerLedge.castShadow = true;
+    const marker = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.42, 0.06), glow);
+    marker.position.set(-cliffSide * 10.15, 0.7, -1.5);
+    landmark.add(ledge, lowerLedge, marker);
   } else {
-    landmark.userData.label = index % 2 ? "EVERGREEN PASS" : "ALPINE LIGHT GATE";
+    landmark.userData.label = index % 2 ? "EVERGREEN PASS" : "ALPINE SUNRISE";
+    // A forest clearing now replaces the previous sci-fi overhead gate.
+    // The paired clusters remain well outside the asphalt and move in full 3D.
     [-1, 1].forEach(function (side) {
-      const tower = new THREE.Mesh(new THREE.BoxGeometry(0.62, 6.8, 0.82), structure);
-      tower.position.set(side * 9.85, 3.3, 0);
-      tower.castShadow = true;
-      landmark.add(tower);
-      for (let braceIndex = 0; braceIndex < 3; braceIndex += 1) {
-        const brace = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 0.36), structure);
-        brace.position.set(side * 9.45, 1.4 + braceIndex * 1.85, 0);
-        brace.rotation.z = side * (braceIndex % 2 ? -0.4 : 0.4);
-        landmark.add(brace);
-      }
-      const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), glow);
-      lantern.position.set(side * 8.85, 5.72, 0.24);
-      landmark.add(lantern);
-    });
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(20, 0.54, 0.82), structure);
-    beam.position.y = 6.55;
-    beam.castShadow = true;
-    landmark.add(beam);
-    [-6, -3, 0, 3, 6].forEach(function (x, lightIndex) {
-      const light = new THREE.Mesh(new THREE.SphereGeometry(0.14 + (lightIndex % 2) * 0.03, 12, 8), glow);
-      light.position.set(x, 6.12, 0.42);
-      landmark.add(light);
+      const grove = createForestScenery(side, index * 3 + (side > 0 ? 1 : 0));
+      grove.scale.setScalar(side < 0 ? 1.2 : 1.05);
+      grove.position.z = side < 0 ? -2.4 : 2.2;
+      landmark.add(grove);
+      const reflector = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.22, 0.05), glow);
+      reflector.position.set(side * 10.1, 0.72, side < 0 ? -0.8 : 0.9);
+      landmark.add(reflector);
     });
   }
 
@@ -2170,8 +2187,10 @@ function buildRoad(map) {
     }
 
     [-1, 1].forEach(function (side) {
-      const shoulder = new THREE.Mesh(new THREE.BoxGeometry(8, 0.12, SEGMENT_LENGTH + 1.2), shoulderMaterial);
-      shoulder.position.set(side * 13, -0.17, 0);
+      const shoulderWidth = map.scenery === "city" ? 8 : 5.8;
+      const shoulderCenter = 9 + shoulderWidth * 0.5;
+      const shoulder = new THREE.Mesh(new THREE.BoxGeometry(shoulderWidth, 0.12, SEGMENT_LENGTH + 1.2), shoulderMaterial);
+      shoulder.position.set(side * shoulderCenter, -0.17, 0);
       shoulder.receiveShadow = true;
       segment.add(shoulder);
       if (map.scenery === "city") {
