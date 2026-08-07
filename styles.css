@@ -66,7 +66,7 @@ img { display: block; width: 100%; }
   transition: transform .32s ease, opacity .32s ease;
 }
 .console-bar::after {
-  content: 'LIVE / 34';
+  content: 'LIVE / 35';
   position: absolute;
   left: 50%;
   top: 50%;
@@ -244,8 +244,8 @@ kbd { min-width: 23px; height: 23px; display: grid; place-items: center; border:
 .map-visual::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,9,14,.06), rgba(5,9,14,.82)), linear-gradient(135deg, rgba(104,225,255,.08), transparent 45%); }
 .map-visual > span { position: absolute; z-index: 2; top: 15px; left: 16px; color: rgba(255,255,255,.7); font: 600 8px/1 var(--mono); letter-spacing: .14em; }
 .city-map { background-image: url('./maps/neon-city-photo-v1.jpg'); }
-.canyon-map { background-image: url('./maps/red-rock-photo-v1.jpg'); }
-.forest-map { background-image: url('./maps/alpine-photo-v1.jpg'); }
+.canyon-map { background-image: linear-gradient(180deg,rgba(16,12,9,.03),rgba(54,28,16,.18)),url('./maps/red-rock-traffic-v35.jpg'); }
+.forest-map { background-image: linear-gradient(180deg,rgba(8,18,20,.02),rgba(13,28,25,.2)),url('./maps/alpine-traffic-v35.jpg'); }
 .city-map > div, .canyon-map > div, .forest-map > div, .canyon-map::before, .canyon-map::after { display: none; }
 .map-copy { position: relative; height: 37%; padding: 18px 19px; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(100deg, rgba(104,225,255,.025), transparent); }
 .map-copy::before { content: ''; position: absolute; top: 0; left: 19px; width: 36px; height: 1px; background: var(--electric); }
