@@ -9,10 +9,21 @@
     <meta property="og:description" content="Two collector cars, three routes, one living automotive archive." />
     <meta property="og:image" content="./og-v29.jpg" />
     <title>TheDrawnMotion — Collector's Run</title>
-    <link rel="stylesheet" href="./styles.css?v=cinematic-terrain-36" />
+    <link rel="stylesheet" href="./styles.css?v=brand-blueprint-37" />
   </head>
   <body>
     <div class="noise" aria-hidden="true"></div>
+    <div class="brand-intro" id="brandIntro" role="dialog" aria-label="The Drawn Motion Collector's Edition">
+      <div class="intro-checkers" aria-hidden="true"></div>
+      <div class="intro-inner">
+        <p>THE DRAWN MOTION</p>
+        <h1>COLLECTOR'S<br /><span>EDITION</span></h1>
+        <small>45-CAR DIGITAL ARCHIVE / SERIES 02</small>
+        <div class="intro-loading" aria-hidden="true"><i></i></div>
+        <div class="intro-meta"><span>LOADING ARCHIVE</span><b>01—45</b></div>
+      </div>
+      <button id="introSkip" type="button">PRESS ANY KEY / SKIP</button>
+    </div>
     <div class="app" id="app">
       <header class="console-bar">
         <button class="wordmark" type="button" data-screen-target="home" aria-label="Return to the main menu">
@@ -52,7 +63,7 @@
             <div class="edition-seal"><small>ACTIVE</small><b>02</b><small>MODELS</small></div>
             <div class="route-line"></div>
           </div>
-          <div class="home-footer"><span>BUILD 36 / CINEMATIC TERRAIN</span><span>KEYBOARD · TOUCH · GAMEPAD</span></div>
+          <div class="home-footer"><span>BUILD 37 / BRAND BLUEPRINT</span><span>KEYBOARD · TOUCH · GAMEPAD</span></div>
         </section>
 
         <section class="screen selection-screen" id="vehicleScreen" aria-labelledby="vehicleTitle">
@@ -64,7 +75,7 @@
             <div class="showroom-stage" id="showroomStage">
               <canvas id="showroomCanvas" aria-label="Interactive 360 degree vehicle showroom"></canvas>
               <div class="showroom-grid" aria-hidden="true"></div>
-              <div class="showroom-copy"><small id="showroomArchive">ARCHIVE 001 / ADVENTURE</small><strong id="showroomName">OVERLAND SILVERADO</strong><span>DRAG THE CAR OR USE THE CONTROLS</span></div>
+              <div class="showroom-copy"><small id="showroomArchive">ARCHIVE 001 / ADVENTURE</small><strong id="showroomName">OVERLAND SILVERADO</strong><span>DRAG THE CAR OR USE THE CONTROLS</span><em>OWNER / INSTAGRAM</em><b id="showroomOwner">@MANDOL_OUTDOORS</b></div>
               <div class="showroom-badge"><b>360°</b><small>REAL-TIME MODEL</small></div>
               <div class="showroom-loading" id="showroomLoading">LOADING PBR MODEL</div>
               <div class="showroom-controls" aria-label="Showroom rotation controls">
@@ -96,6 +107,10 @@
               </article>
             </div>
           </div>
+          <div class="archive-browser">
+            <div class="archive-browser-head"><div><small>THE DRAWN MOTION ARCHIVE</small><strong>SELECT YOUR CAR</strong></div><b id="archivePosition">01 OF 45</b></div>
+            <div class="archive-rail" id="archiveRail" aria-label="45 car collection"></div>
+          </div>
           <div class="selection-actions"><button class="back-button" type="button" data-screen-target="home">← BACK</button><button class="primary-button compact" id="vehicleContinue" type="button"><span>CHOOSE ROUTE</span><i>→</i></button></div>
         </section>
 
@@ -103,6 +118,11 @@
           <div class="screen-heading">
             <div><p class="kicker">ROUTE / 02</p><h2 id="mapTitle">CHOOSE<br />YOUR ROUTE</h2></div>
             <p>Three endless worlds. Traffic intensifies every lap while four lost archive pages wait on the road.</p>
+          </div>
+          <div class="route-preview" id="routePreview" data-map="city">
+            <div class="route-preview-shade" aria-hidden="true"></div>
+            <div class="route-preview-copy"><small id="routePreviewKicker">NIGHT / ASPHALT</small><strong id="routePreviewTitle">NEON CITY CIRCUIT</strong><span id="routePreviewMeta">ENDLESS · MEDIUM · 4 ARCHIVE PAGES</span></div>
+            <div class="route-preview-checkers" aria-hidden="true"></div>
           </div>
           <div class="map-grid">
             <article class="map-card selected" data-map="city" tabindex="0">
@@ -177,6 +197,6 @@
         }
       }
     </script>
-  <script type="module" src="./game3d.js?v=cinematic-terrain-36"></script>
+  <script type="module" src="./game3d.js?v=brand-blueprint-37"></script>
   </body>
 </html>

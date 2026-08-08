@@ -28,6 +28,7 @@ const vehicles = {
     cameraDistanceBias: 0.8,
     viewYaw: 0,
     archiveLabel: "ARCHIVE 001 / ADVENTURE",
+    ownerInstagram: "@MANDOL_OUTDOORS",
     showroomDistance: 7.6,
     truck: true,
     tripoModel: true,
@@ -56,6 +57,7 @@ const vehicles = {
     cameraDistanceBias: 1.15,
     viewYaw: 0,
     archiveLabel: "ARCHIVE 002 / GRAND TOURER",
+    ownerInstagram: "@OWNER_TO_BE_CONFIRMED",
     showroomDistance: 6.7,
     truck: false,
     tripoModel: true,
@@ -128,6 +130,12 @@ const maps = {
   },
 };
 
+const mapPresentation = {
+  city: { kicker: "NIGHT / ASPHALT", meta: "ENDLESS · MEDIUM · 4 ARCHIVE PAGES" },
+  canyon: { kicker: "SUNSET / DUST", meta: "ENDLESS · HARD · 4 ARCHIVE PAGES" },
+  forest: { kicker: "DAWN / MOUNTAIN", meta: "ENDLESS · EXPERT · 4 ARCHIVE PAGES" },
+};
+
 const app = document.getElementById("app");
 const screens = {
   home: document.getElementById("homeScreen"),
@@ -149,7 +157,16 @@ const showroomStage = document.getElementById("showroomStage");
 const showroomLoading = document.getElementById("showroomLoading");
 const showroomName = document.getElementById("showroomName");
 const showroomArchive = document.getElementById("showroomArchive");
+const showroomOwner = document.getElementById("showroomOwner");
 const showroomAutoButton = document.getElementById("showroomAuto");
+const archiveRail = document.getElementById("archiveRail");
+const archivePosition = document.getElementById("archivePosition");
+const routePreview = document.getElementById("routePreview");
+const routePreviewKicker = document.getElementById("routePreviewKicker");
+const routePreviewTitle = document.getElementById("routePreviewTitle");
+const routePreviewMeta = document.getElementById("routePreviewMeta");
+const brandIntro = document.getElementById("brandIntro");
+const introSkip = document.getElementById("introSkip");
 
 const hud = {
   vehicleImage: document.getElementById("hudVehicleImage"),
@@ -440,21 +457,69 @@ function updateBestLabels() {
 }
 
 function chooseVehicle(id) {
+  const vehicle = vehicles[id];
+  if (!vehicle) return;
   state.vehicle = id;
   document.querySelectorAll(".vehicle-select-card").forEach(function (card) {
     const selected = card.dataset.vehicle === id;
     card.classList.toggle("selected", selected);
     card.querySelector(".selected-mark").textContent = selected ? "SELECTED" : "SELECT";
   });
+  document.querySelectorAll(".archive-slot[data-vehicle]").forEach(function (slot) {
+    slot.classList.toggle("selected", slot.dataset.vehicle === id);
+  });
+  const catalogEntry = collectionCatalog.find(function (entry) { return entry.vehicleId === id; });
+  archivePosition.textContent = String(catalogEntry ? catalogEntry.slot : 1).padStart(2, "0") + " OF 45";
+  showroomOwner.textContent = vehicle.ownerInstagram;
   loadShowroomVehicle(id);
 }
 
 function chooseMap(id) {
+  if (!maps[id]) return;
   state.map = id;
   document.querySelectorAll(".map-card").forEach(function (card) {
     card.classList.toggle("selected", card.dataset.map === id);
   });
+  routePreview.dataset.map = id;
+  routePreviewKicker.textContent = mapPresentation[id].kicker;
+  routePreviewTitle.textContent = maps[id].name;
+  routePreviewMeta.textContent = mapPresentation[id].meta;
 }
+
+function buildArchiveRail() {
+  const fragment = document.createDocumentFragment();
+  collectionCatalog.forEach(function (entry) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "archive-slot";
+    button.setAttribute("aria-label", "Archive car " + String(entry.slot).padStart(2, "0"));
+    if (entry.status === "active") {
+      const vehicle = vehicles[entry.vehicleId];
+      button.dataset.vehicle = entry.vehicleId;
+      button.innerHTML = '<img src="' + vehicle.image + '" alt="" /><span><small>' + String(entry.slot).padStart(2, "0") + '</small><b>' + vehicle.name + '</b></span>';
+      button.classList.toggle("selected", state.vehicle === entry.vehicleId);
+      button.addEventListener("click", function () { chooseVehicle(entry.vehicleId); });
+    } else {
+      button.classList.add("awaiting");
+      button.disabled = true;
+      button.innerHTML = '<span><small>' + String(entry.slot).padStart(2, "0") + '</small><b>MODEL PENDING</b></span>';
+    }
+    fragment.appendChild(button);
+  });
+  archiveRail.appendChild(fragment);
+}
+
+let introDismissed = false;
+function dismissIntro() {
+  if (introDismissed) return;
+  introDismissed = true;
+  brandIntro.classList.add("hide");
+  window.setTimeout(function () { brandIntro.hidden = true; }, 700);
+}
+
+introSkip.addEventListener("click", dismissIntro);
+window.addEventListener("keydown", function dismissIntroWithKey() { dismissIntro(); }, { once: true });
+window.setTimeout(dismissIntro, 2600);
 
 function bindSelectable(selector, callback, dataKey) {
   document.querySelectorAll(selector).forEach(function (item) {
@@ -471,6 +536,8 @@ function bindSelectable(selector, callback, dataKey) {
 
 bindSelectable(".vehicle-select-card", chooseVehicle, "vehicle");
 bindSelectable(".map-card", chooseMap, "map");
+buildArchiveRail();
+chooseMap(state.map);
 document.querySelectorAll("[data-screen-target]").forEach(function (button) {
   button.addEventListener("click", function () { showScreen(button.dataset.screenTarget); });
 });
@@ -1241,6 +1308,7 @@ async function loadShowroomVehicle(id) {
   showroomLoading.textContent = "LOADING PBR MODEL";
   showroomName.textContent = vehicle.name;
   showroomArchive.textContent = vehicle.archiveLabel;
+  showroomOwner.textContent = vehicle.ownerInstagram;
   try {
     const gltf = await warmVehicleModel(vehicle);
     if (token !== showroom.loadToken) return;
