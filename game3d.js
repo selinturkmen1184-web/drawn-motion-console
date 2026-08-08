@@ -340,6 +340,8 @@ let canyonRockTexture = null;
 let canyonRockReliefTexture = null;
 let forestFloorTexture = null;
 let forestFloorReliefTexture = null;
+let alpineGraniteTexture = null;
+let alpineGraniteReliefTexture = null;
 let softParticleTexture = null;
 const sceneryMaterials = new Map();
 
@@ -371,10 +373,55 @@ function createEvergreenCrownGeometry(seed) {
   return geometry;
 }
 
+function createMountainGeometry(seed) {
+  const geometry = new THREE.ConeGeometry(1, 1, 22, 7, false);
+  const position = geometry.attributes.position;
+  for (let vertex = 0; vertex < position.count; vertex += 1) {
+    const x = position.getX(vertex);
+    const y = position.getY(vertex);
+    const z = position.getZ(vertex);
+    const angle = Math.atan2(z, x);
+    const height = y + 0.5;
+    const weathering = 1
+      + Math.sin(angle * 3 + seed * 1.8 + height * 8) * 0.11
+      + Math.sin(angle * 7 - seed + height * 15) * 0.055;
+    position.setX(vertex, x * weathering);
+    position.setZ(vertex, z * weathering);
+    position.setY(vertex, y + Math.sin(angle * 5 + seed) * (1 - height) * 0.035);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createMesaGeometry(seed) {
+  const profile = [
+    [0.78, -0.5], [0.96, -0.43], [1.0, -0.31], [0.84, -0.23],
+    [0.9, -0.08], [0.74, 0.04], [0.81, 0.16], [0.64, 0.27],
+    [0.71, 0.36], [0.5, 0.44], [0.34, 0.5],
+  ].map(function (point) { return new THREE.Vector2(point[0], point[1]); });
+  const geometry = new THREE.LatheGeometry(profile, 24);
+  const position = geometry.attributes.position;
+  for (let vertex = 0; vertex < position.count; vertex += 1) {
+    const x = position.getX(vertex);
+    const y = position.getY(vertex);
+    const z = position.getZ(vertex);
+    const angle = Math.atan2(z, x);
+    const erosion = 1
+      + Math.sin(angle * 4 + seed * 1.9 + y * 7) * 0.07
+      + Math.sin(angle * 9 - seed + y * 13) * 0.035;
+    position.setX(vertex, x * erosion);
+    position.setZ(vertex, z * erosion);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 const sceneryGeometry = {
   cube: new THREE.BoxGeometry(1, 1, 1),
-  rock: new THREE.IcosahedronGeometry(1, 1),
-  cliff: new THREE.IcosahedronGeometry(1, 2),
+  rock: new THREE.IcosahedronGeometry(1, 2),
+  cliff: new THREE.IcosahedronGeometry(1, 3),
   shrub: new THREE.DodecahedronGeometry(0.5, 0),
   mesa: new THREE.CylinderGeometry(0.72, 1, 1, 12),
   trunk: new THREE.CylinderGeometry(0.1, 0.16, 1, 7),
@@ -384,6 +431,16 @@ const sceneryGeometry = {
     createEvergreenCrownGeometry(1),
     createEvergreenCrownGeometry(2),
     createEvergreenCrownGeometry(3),
+  ],
+  mountains: [
+    createMountainGeometry(1),
+    createMountainGeometry(2),
+    createMountainGeometry(3),
+  ],
+  mesaFormations: [
+    createMesaGeometry(1),
+    createMesaGeometry(2),
+    createMesaGeometry(3),
   ],
 };
 
@@ -696,10 +753,10 @@ function makeMaterial(color, roughness, metalness) {
 
 function createAsphaltTexture() {
   if (asphaltTexture) return asphaltTexture;
-  asphaltTexture = textureLoader.load("./maps/asphalt-seamless-v1.jpg");
-  asphaltTexture.wrapS = THREE.RepeatWrapping;
-  asphaltTexture.wrapT = THREE.RepeatWrapping;
-  asphaltTexture.repeat.set(2.7, 7.4);
+  asphaltTexture = textureLoader.load("./maps/asphalt-ai-v41.jpg");
+  asphaltTexture.wrapS = THREE.MirroredRepeatWrapping;
+  asphaltTexture.wrapT = THREE.MirroredRepeatWrapping;
+  asphaltTexture.repeat.set(3.4, 10.8);
   asphaltTexture.colorSpace = THREE.SRGBColorSpace;
   asphaltTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
   return asphaltTexture;
@@ -707,35 +764,10 @@ function createAsphaltTexture() {
 
 function createAsphaltReliefTexture() {
   if (asphaltReliefTexture) return asphaltReliefTexture;
-  const textureCanvas = document.createElement("canvas");
-  textureCanvas.width = 256;
-  textureCanvas.height = 512;
-  const context = textureCanvas.getContext("2d");
-  context.fillStyle = "#858585";
-  context.fillRect(0, 0, textureCanvas.width, textureCanvas.height);
-  for (let index = 0; index < 9000; index += 1) {
-    const tone = 82 + (index * 47) % 92;
-    context.fillStyle = "rgb(" + tone + "," + tone + "," + tone + ")";
-    context.globalAlpha = 0.16 + ((index * 13) % 32) / 100;
-    const x = (index * 67 + index * index * 3) % textureCanvas.width;
-    const y = (index * 109 + index * index) % textureCanvas.height;
-    const grain = 1 + (index % 3);
-    context.fillRect(x, y, grain, grain * 0.65);
-  }
-  context.globalAlpha = 0.2;
-  context.strokeStyle = "#343434";
-  context.lineWidth = 1.2;
-  [47, 98, 166, 211].forEach(function (x, index) {
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.bezierCurveTo(x + 5, 160, x - 7, 340, x + index - 2, 512);
-    context.stroke();
-  });
-  context.globalAlpha = 1;
-  asphaltReliefTexture = new THREE.CanvasTexture(textureCanvas);
-  asphaltReliefTexture.wrapS = THREE.RepeatWrapping;
-  asphaltReliefTexture.wrapT = THREE.RepeatWrapping;
-  asphaltReliefTexture.repeat.set(3.2, 8.4);
+  asphaltReliefTexture = textureLoader.load("./maps/asphalt-ai-v41.jpg");
+  asphaltReliefTexture.wrapS = THREE.MirroredRepeatWrapping;
+  asphaltReliefTexture.wrapT = THREE.MirroredRepeatWrapping;
+  asphaltReliefTexture.repeat.set(3.4, 10.8);
   asphaltReliefTexture.colorSpace = THREE.NoColorSpace;
   asphaltReliefTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
   return asphaltReliefTexture;
@@ -930,71 +962,11 @@ function getCityFacadeTexture() {
 
 function getPineTexture() {
   if (pineTexture) return pineTexture;
-  const pineCanvas = document.createElement("canvas");
-  pineCanvas.width = 384;
-  pineCanvas.height = 768;
-  const context = pineCanvas.getContext("2d");
-  context.clearRect(0, 0, pineCanvas.width, pineCanvas.height);
-  const trunkGradient = context.createLinearGradient(168, 0, 216, 0);
-  trunkGradient.addColorStop(0, "rgba(34,29,24,.96)");
-  trunkGradient.addColorStop(0.5, "rgba(96,70,47,.98)");
-  trunkGradient.addColorStop(1, "rgba(29,25,22,.96)");
-  context.fillStyle = trunkGradient;
-  context.fillRect(179, 190, 28, 548);
-
-  const branchColors = ["rgba(16,49,36,.98)", "rgba(24,69,49,.98)", "rgba(37,84,59,.96)", "rgba(52,98,70,.9)"];
-  for (let spray = 0; spray < 520; spray += 1) {
-    const y = 54 + (spray * 43 + spray * spray * 3) % 628;
-    const depth = THREE.MathUtils.clamp((y - 34) / 650, 0.04, 1);
-    const maxWidth = 18 + Math.pow(depth, 0.76) * 154;
-    const offset = (((spray * 97) % 1000) / 1000 * 2 - 1) * maxWidth;
-    const radiusX = 7 + (spray * 13) % 19;
-    const radiusY = 3 + (spray * 7) % 8;
-    context.fillStyle = branchColors[(spray * 7) % branchColors.length];
-    context.globalAlpha = 0.18 + (spray % 7) * 0.055;
-    context.beginPath();
-    context.ellipse(192 + offset, y, radiusX, radiusY, offset * 0.0038, 0, Math.PI * 2);
-    context.fill();
-  }
-  context.globalAlpha = 1;
-  for (let branch = 0; branch < 118; branch += 1) {
-    const y = 58 + branch * 5.25;
-    const spread = 22 + Math.pow(branch / 118, 0.72) * 155;
-    const direction = branch % 2 ? 1 : -1;
-    const jitter = ((branch * 37) % 17) - 8;
-    const endX = 192 + direction * (spread * (0.68 + (branch % 7) * 0.045)) + jitter;
-    const endY = y + 48 + (branch % 6) * 5;
-    context.strokeStyle = branchColors[(branch * 5) % branchColors.length];
-    context.lineWidth = 3.8 - branch / 118 * 1.45;
-    context.beginPath();
-    context.moveTo(192, y);
-    context.quadraticCurveTo(192 + direction * spread * 0.38, y + 9, endX, endY);
-    context.stroke();
-    for (let needle = 1; needle <= 6; needle += 1) {
-      const t = needle / 7;
-      const stemX = 192 + (endX - 192) * t;
-      const stemY = y + (endY - y) * t - Math.sin(t * Math.PI) * 8;
-      const needleLength = 12 + (branch + needle * 3) % 10;
-      context.lineWidth = 1.2;
-      context.globalAlpha = 0.68 + (needle % 3) * 0.1;
-      context.beginPath();
-      context.moveTo(stemX, stemY);
-      context.lineTo(stemX - direction * needleLength * 0.35, stemY + needleLength);
-      context.moveTo(stemX, stemY);
-      context.lineTo(stemX + direction * needleLength * 0.22, stemY + needleLength * 0.9);
-      context.stroke();
-    }
-  }
-  context.globalAlpha = 1;
-  const crown = context.createRadialGradient(192, 85, 5, 192, 120, 58);
-  crown.addColorStop(0, "rgba(66,112,81,.9)");
-  crown.addColorStop(1, "rgba(12,43,32,0)");
-  context.fillStyle = crown;
-  context.fillRect(126, 38, 132, 164);
-  pineTexture = new THREE.CanvasTexture(pineCanvas);
+  pineTexture = textureLoader.load("./maps/spruce-ai-v41.webp");
   pineTexture.colorSpace = THREE.SRGBColorSpace;
   pineTexture.minFilter = THREE.LinearMipmapLinearFilter;
-  pineTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  pineTexture.magFilter = THREE.LinearFilter;
+  pineTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
   return pineTexture;
 }
 
@@ -1030,6 +1002,25 @@ function getForestFloorTextures() {
   forestFloorReliefTexture.colorSpace = THREE.NoColorSpace;
   forestFloorReliefTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   return { color: forestFloorTexture, relief: forestFloorReliefTexture };
+}
+
+function getAlpineGraniteTextures() {
+  if (alpineGraniteTexture && alpineGraniteReliefTexture) {
+    return { color: alpineGraniteTexture, relief: alpineGraniteReliefTexture };
+  }
+  alpineGraniteTexture = textureLoader.load("./maps/alpine-granite-ai-v41.jpg");
+  alpineGraniteTexture.wrapS = THREE.MirroredRepeatWrapping;
+  alpineGraniteTexture.wrapT = THREE.MirroredRepeatWrapping;
+  alpineGraniteTexture.repeat.set(1.45, 1.45);
+  alpineGraniteTexture.colorSpace = THREE.SRGBColorSpace;
+  alpineGraniteTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
+  alpineGraniteReliefTexture = textureLoader.load("./maps/alpine-granite-ai-v41.jpg");
+  alpineGraniteReliefTexture.wrapS = THREE.MirroredRepeatWrapping;
+  alpineGraniteReliefTexture.wrapT = THREE.MirroredRepeatWrapping;
+  alpineGraniteReliefTexture.repeat.copy(alpineGraniteTexture.repeat);
+  alpineGraniteReliefTexture.colorSpace = THREE.NoColorSpace;
+  alpineGraniteReliefTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return { color: alpineGraniteTexture, relief: alpineGraniteReliefTexture };
 }
 
 function createContactShadow(vehicle) {
@@ -1796,7 +1787,7 @@ function createCanyonScenery(side, index) {
         bumpMap: rockTextures.relief,
         bumpScale: 0.18,
         roughness: 1,
-        flatShading: true,
+        flatShading: false,
       });
     });
   });
@@ -1807,13 +1798,16 @@ function createCanyonScenery(side, index) {
     const formationX = side * (27 + mesaIndex * 13 + (index % 3) * 2.8);
     const formationZ = -9 + mesaIndex * 13 + (index % 4);
     [0, 1, 2].forEach(function (part) {
-      const cliff = new THREE.Mesh(sceneryGeometry.cliff, mesaMaterials[(index + mesaIndex + part) % 2]);
+      const cliff = new THREE.Mesh(
+        sceneryGeometry.mesaFormations[(index + mesaIndex + part) % sceneryGeometry.mesaFormations.length],
+        mesaMaterials[(index + mesaIndex + part) % 2],
+      );
       const partHeight = height * (part === 0 ? 0.62 : part === 1 ? 0.45 : 0.34);
       const partWidth = (7.6 + mesaIndex * 1.9) * (part === 0 ? 1 : part === 1 ? 0.74 : 0.58);
       cliff.scale.set(partWidth, partHeight, 6.4 + ((index + part) % 3) * 1.6);
       cliff.position.set(
         formationX + side * (part === 0 ? 0 : part === 1 ? partWidth * 0.55 : -partWidth * 0.48),
-        partHeight * 0.64 + part * height * 0.13 - 0.8,
+        partHeight * 0.5 + part * height * 0.08 - 0.38,
         formationZ + (part - 1) * 3.4,
       );
       cliff.rotation.set((part - 1) * 0.05, index * 0.29 + part * 0.67, side * (part - 1) * 0.055);
@@ -1870,19 +1864,29 @@ function createForestScenery(side, index) {
     return getSceneryMaterial("forest-needle-detail-" + shade, function () {
       return new THREE.MeshStandardMaterial({
         map: getPineTexture(),
-        color: [0x597061, 0x415d4d, 0x6a7d6e][shade],
+        color: [0xffffff, 0xd8dfda, 0xecf2ed][shade],
         transparent: true,
-        alphaTest: 0.16,
+        alphaTest: 0.22,
         side: THREE.DoubleSide,
         roughness: 1,
         metalness: 0,
+        depthWrite: true,
       });
     });
   });
   const trunkMaterial = getSceneryMaterial("forest-natural-trunk", function () { return makeMaterial(0x4b392d, 0.98, 0); });
   const stoneMaterials = [0, 1].map(function (shade) {
     return getSceneryMaterial("forest-natural-stone-" + shade, function () {
-      return new THREE.MeshStandardMaterial({ color: [0x4f5b56, 0x3d4945][shade], roughness: 0.98, flatShading: true });
+      const granite = getAlpineGraniteTextures();
+      return new THREE.MeshStandardMaterial({
+        color: [0xb8c0bc, 0x8f9994][shade],
+        map: granite.color,
+        bumpMap: granite.relief,
+        bumpScale: 0.12,
+        roughness: 0.98,
+        metalness: 0,
+        flatShading: false,
+      });
     });
   });
   const undergrowthMaterials = [0, 1].map(function (shade) {
@@ -1903,36 +1907,16 @@ function createForestScenery(side, index) {
     trunk.position.y = height * 0.17;
     trunk.castShadow = treeIndex === 0;
     tree.add(trunk);
-    const crownVariant = (index + treeIndex) % sceneryGeometry.evergreenCrowns.length;
-    const crown = new THREE.Mesh(
-      sceneryGeometry.evergreenCrowns[crownVariant],
-      foliageMaterials[(index + treeIndex) % foliageMaterials.length],
-    );
-    crown.scale.set(width * 0.59, height * 0.88, width * (0.52 + crownVariant * 0.025));
-    crown.position.set(width * 0.025, height * 0.57, -width * 0.018);
-    crown.rotation.y = index * 0.17 + treeIndex * 0.41;
-    crown.castShadow = treeIndex === 0;
-    crown.receiveShadow = true;
-    tree.add(crown);
-
-    const innerCrown = new THREE.Mesh(
-      sceneryGeometry.evergreenCrowns[(crownVariant + 1) % sceneryGeometry.evergreenCrowns.length],
-      foliageMaterials[(index + treeIndex + 1) % foliageMaterials.length],
-    );
-    innerCrown.scale.set(width * 0.43, height * 0.74, width * 0.39);
-    innerCrown.position.set(-width * 0.04, height * 0.63, width * 0.025);
-    innerCrown.rotation.y = crown.rotation.y + 0.79;
-    innerCrown.receiveShadow = true;
-    tree.add(innerCrown);
-
-    [0, 1].forEach(function (planeIndex) {
+    const crownRotation = index * 0.17 + treeIndex * 0.41;
+    [0, 1, 2].forEach(function (planeIndex) {
       const branchDetail = new THREE.Mesh(
         sceneryGeometry.pinePlane,
         branchDetailMaterials[(index + treeIndex + planeIndex) % branchDetailMaterials.length],
       );
-      branchDetail.scale.set(width * 1.13, height * 0.96, 1);
+      branchDetail.scale.set(width * 1.22, height * 1.02, 1);
       branchDetail.position.y = height * 0.51;
-      branchDetail.rotation.y = crown.rotation.y + planeIndex * Math.PI / 2 + Math.PI / 4;
+      branchDetail.rotation.y = crownRotation + planeIndex * Math.PI / 3 + Math.PI / 6;
+      branchDetail.castShadow = treeIndex === 0 && planeIndex === 0;
       branchDetail.receiveShadow = true;
       tree.add(branchDetail);
     });
@@ -1947,14 +1931,18 @@ function createForestScenery(side, index) {
 
   if (index % 3 === 0) {
     const mountainMaterial = getSceneryMaterial("forest-mountain", function () {
+      const granite = getAlpineGraniteTextures();
       return new THREE.MeshStandardMaterial({
-        color: 0x60736e,
+        color: 0xaeb9b4,
+        map: granite.color,
+        bumpMap: granite.relief,
+        bumpScale: 0.2,
         roughness: 1,
         metalness: 0,
         flatShading: false,
       });
     });
-    const mountain = new THREE.Mesh(sceneryGeometry.rock, mountainMaterial);
+    const mountain = new THREE.Mesh(sceneryGeometry.mountains[index % sceneryGeometry.mountains.length], mountainMaterial);
     mountain.scale.set(13 + index % 5, 10 + index % 4, 12 + index % 3);
     mountain.position.set(side * (39 + index % 4 * 3), 5.5, -8 + index % 5 * 3.2);
     mountain.rotation.set(0.08, index * 0.31, side * 0.04);
