@@ -334,6 +334,7 @@ const environmentTextureCache = new Map();
 const textureLoader = new THREE.TextureLoader();
 let cityFacadeTexture = null;
 let pineTexture = null;
+let scotsPineTexture = null;
 let asphaltTexture = null;
 let asphaltReliefTexture = null;
 let canyonRockTexture = null;
@@ -960,14 +961,18 @@ function getCityFacadeTexture() {
   return cityFacadeTexture;
 }
 
-function getPineTexture() {
-  if (pineTexture) return pineTexture;
-  pineTexture = textureLoader.load("./maps/spruce-ai-v41.webp");
-  pineTexture.colorSpace = THREE.SRGBColorSpace;
-  pineTexture.minFilter = THREE.LinearMipmapLinearFilter;
-  pineTexture.magFilter = THREE.LinearFilter;
-  pineTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
-  return pineTexture;
+function getPineTexture(species) {
+  const isScotsPine = species === 1;
+  if (isScotsPine && scotsPineTexture) return scotsPineTexture;
+  if (!isScotsPine && pineTexture) return pineTexture;
+  const texture = textureLoader.load(isScotsPine ? "./maps/scots-pine-ai-v42.webp" : "./maps/spruce-ai-v41.webp");
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
+  if (isScotsPine) scotsPineTexture = texture;
+  else pineTexture = texture;
+  return texture;
 }
 
 function getCanyonRockTextures() {
@@ -1802,9 +1807,9 @@ function createCanyonScenery(side, index) {
         sceneryGeometry.mesaFormations[(index + mesaIndex + part) % sceneryGeometry.mesaFormations.length],
         mesaMaterials[(index + mesaIndex + part) % 2],
       );
-      const partHeight = height * (part === 0 ? 0.62 : part === 1 ? 0.45 : 0.34);
-      const partWidth = (7.6 + mesaIndex * 1.9) * (part === 0 ? 1 : part === 1 ? 0.74 : 0.58);
-      cliff.scale.set(partWidth, partHeight, 6.4 + ((index + part) % 3) * 1.6);
+      const partHeight = height * (part === 0 ? 0.88 : part === 1 ? 0.67 : 0.5);
+      const partWidth = (5.8 + mesaIndex * 1.55) * (part === 0 ? 1 : part === 1 ? 0.72 : 0.57);
+      cliff.scale.set(partWidth, partHeight, 5.3 + ((index + part) % 3) * 1.25);
       cliff.position.set(
         formationX + side * (part === 0 ? 0 : part === 1 ? partWidth * 0.55 : -partWidth * 0.48),
         partHeight * 0.5 + part * height * 0.08 - 0.38,
@@ -1850,21 +1855,13 @@ function createCanyonScenery(side, index) {
 
 function createForestScenery(side, index) {
   const group = new THREE.Group();
-  const foliageMaterials = [0, 1, 2].map(function (shade) {
-    return getSceneryMaterial("forest-natural-foliage-" + shade, function () {
+  const branchDetailMaterials = Array.from({ length: 6 }, function (_, materialIndex) {
+    const species = materialIndex < 3 ? 0 : 1;
+    const shade = materialIndex % 3;
+    return getSceneryMaterial("forest-needle-detail-" + species + "-" + shade, function () {
       return new THREE.MeshStandardMaterial({
-        color: [0x254534, 0x19362a, 0x365440][shade],
-        roughness: 0.98,
-        metalness: 0,
-        flatShading: false,
-      });
-    });
-  });
-  const branchDetailMaterials = [0, 1, 2].map(function (shade) {
-    return getSceneryMaterial("forest-needle-detail-" + shade, function () {
-      return new THREE.MeshStandardMaterial({
-        map: getPineTexture(),
-        color: [0xffffff, 0xd8dfda, 0xecf2ed][shade],
+        map: getPineTexture(species),
+        color: [0xffffff, 0xd2d9d4, 0xe7eee9][shade],
         transparent: true,
         alphaTest: 0.22,
         side: THREE.DoubleSide,
@@ -1897,9 +1894,10 @@ function createForestScenery(side, index) {
 
   // Irregular lathed crowns create a natural spruce outline, while crossed
   // needle cards keep small branch detail visible from every driving angle.
-  const treeCount = 2 + (index % 2);
+  const treeCount = 3 + (index % 2);
   for (let treeIndex = 0; treeIndex < treeCount; treeIndex += 1) {
-    const height = 6.8 + ((index * 7 + treeIndex * 5) % 8) * 0.62;
+    const species = (index + treeIndex) % 2;
+    const height = (6.8 + ((index * 7 + treeIndex * 5) % 8) * 0.62) * (species ? 0.92 : 1);
     const width = height * (0.47 + ((index + treeIndex) % 3) * 0.03);
     const tree = new THREE.Group();
     const trunk = new THREE.Mesh(sceneryGeometry.trunk, trunkMaterial);
@@ -1911,9 +1909,9 @@ function createForestScenery(side, index) {
     [0, 1, 2].forEach(function (planeIndex) {
       const branchDetail = new THREE.Mesh(
         sceneryGeometry.pinePlane,
-        branchDetailMaterials[(index + treeIndex + planeIndex) % branchDetailMaterials.length],
+        branchDetailMaterials[species * 3 + (index + treeIndex + planeIndex) % 3],
       );
-      branchDetail.scale.set(width * 1.22, height * 1.02, 1);
+      branchDetail.scale.set(width * (species ? 1.38 : 1.22), height * (species ? 0.98 : 1.02), 1);
       branchDetail.position.y = height * 0.51;
       branchDetail.rotation.y = crownRotation + planeIndex * Math.PI / 3 + Math.PI / 6;
       branchDetail.castShadow = treeIndex === 0 && planeIndex === 0;
@@ -1921,9 +1919,9 @@ function createForestScenery(side, index) {
       tree.add(branchDetail);
     });
     tree.position.set(
-      side * (13.2 + treeIndex * 4.35 + ((index + treeIndex) % 2) * 1.05),
+      side * (12.9 + treeIndex * 3.75 + ((index + treeIndex) % 2) * 0.9),
       -0.1,
-      -11 + treeIndex * 9.2 + ((index * 3 + treeIndex) % 3) * 0.8,
+      -12 + treeIndex * 7.25 + ((index * 3 + treeIndex) % 3) * 0.8,
     );
     tree.rotation.y = index * 0.31 + treeIndex * 0.73;
     group.add(tree);
@@ -2124,6 +2122,39 @@ function buildAtmosphere(map) {
       atmosphereLayers.push(particles);
     }
   }
+
+  if (!isCity) {
+    const cloudCount = map.scenery === "canyon" ? 24 : 18;
+    const positions = new Float32Array(cloudCount * 3);
+    const phases = new Float32Array(cloudCount);
+    for (let index = 0; index < cloudCount; index += 1) {
+      const offset = index * 3;
+      positions[offset] = (Math.random() - 0.5) * 170;
+      positions[offset + 1] = 17 + Math.random() * 17;
+      positions[offset + 2] = 35 - Math.random() * 390;
+      phases[index] = Math.random() * Math.PI * 2;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({
+      color: map.scenery === "canyon" ? 0xffd3ae : 0xe6f2ee,
+      map: getSoftParticleTexture(),
+      alphaMap: getSoftParticleTexture(),
+      size: map.scenery === "canyon" ? 18 : 14,
+      transparent: true,
+      opacity: map.scenery === "canyon" ? 0.1 : 0.075,
+      blending: THREE.NormalBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+    const clouds = new THREE.Points(geometry, material);
+    clouds.frustumCulled = false;
+    clouds.userData.kind = "cloud";
+    clouds.userData.layer = 0;
+    clouds.userData.phases = phases;
+    atmosphereWorld.add(clouds);
+    atmosphereLayers.push(clouds);
+  }
 }
 
 function createRouteLandmark(map, index) {
@@ -2239,14 +2270,15 @@ function updateAtmosphere(dt, time, travel) {
       }
     } else {
       const phases = layer.userData.phases;
+      const isCloud = layer.userData.kind === "cloud";
       for (let offset = 0, point = 0; offset < positions.length; offset += 3, point += 1) {
-        positions[offset + 2] += travel * (0.78 + layer.userData.layer * 0.12);
-        positions[offset] += Math.sin(time * 0.65 + phases[point]) * dt * (layer.userData.kind === "dust" ? 0.34 : 0.18);
-        positions[offset + 1] += Math.sin(time * 0.9 + phases[point] * 1.7) * dt * 0.08;
-        if (positions[offset + 2] > 24) {
+        positions[offset + 2] += travel * (isCloud ? 0.055 : 0.78 + layer.userData.layer * 0.12);
+        positions[offset] += Math.sin(time * (isCloud ? 0.08 : 0.65) + phases[point]) * dt * (isCloud ? 0.24 : layer.userData.kind === "dust" ? 0.34 : 0.18);
+        positions[offset + 1] += Math.sin(time * (isCloud ? 0.12 : 0.9) + phases[point] * 1.7) * dt * (isCloud ? 0.025 : 0.08);
+        if (positions[offset + 2] > (isCloud ? 55 : 24)) {
           positions[offset + 2] = -300 - Math.random() * 70;
-          positions[offset] = (Math.random() - 0.5) * (50 + layer.userData.layer * 16);
-          positions[offset + 1] = 0.35 + Math.random() * (layer.userData.kind === "dust" ? 8 : 12);
+          positions[offset] = (Math.random() - 0.5) * (isCloud ? 170 : 50 + layer.userData.layer * 16);
+          positions[offset + 1] = isCloud ? 17 + Math.random() * 17 : 0.35 + Math.random() * (layer.userData.kind === "dust" ? 8 : 12);
         }
       }
     }
