@@ -101,7 +101,7 @@ const maps = {
     pageLanes: [1, -1, 0, 1],
     sky: 0xc98255,
     fog: 0x8d6750,
-    fogDensity: 0.00265,
+    fogDensity: 0.00365,
     road: 0x211c1b,
     shoulder: 0x694433,
     line: 0xffe7c0,
@@ -119,7 +119,7 @@ const maps = {
     pageLanes: [0, 1, -1, 0],
     sky: 0x8295a2,
     fog: 0x52636d,
-    fogDensity: 0.00365,
+    fogDensity: 0.00435,
     road: 0x162024,
     shoulder: 0x1f3329,
     line: 0xdcefdc,
@@ -305,7 +305,8 @@ const roadWorld = new THREE.Group();
 const trafficWorld = new THREE.Group();
 const collectibleWorld = new THREE.Group();
 const atmosphereWorld = new THREE.Group();
-world.add(roadWorld, trafficWorld, collectibleWorld, atmosphereWorld);
+const skyWorld = new THREE.Group();
+world.add(skyWorld, roadWorld, trafficWorld, collectibleWorld, atmosphereWorld);
 scene.add(world);
 
 const SEGMENT_LENGTH = 42;
@@ -342,6 +343,7 @@ const sceneryMaterials = new Map();
 const sceneryGeometry = {
   cube: new THREE.BoxGeometry(1, 1, 1),
   rock: new THREE.IcosahedronGeometry(1, 1),
+  cliff: new THREE.IcosahedronGeometry(1, 2),
   shrub: new THREE.DodecahedronGeometry(0.5, 0),
   mesa: new THREE.CylinderGeometry(0.72, 1, 1, 12),
   trunk: new THREE.CylinderGeometry(0.1, 0.16, 1, 7),
@@ -740,11 +742,68 @@ function getSceneryMaterial(key, factory) {
   return sceneryMaterials.get(key);
 }
 
+function buildProceduralSky(map) {
+  skyWorld.traverse(function (object) {
+    if (object.geometry) object.geometry.dispose();
+    if (object.material) object.material.dispose();
+  });
+  skyWorld.clear();
+  const palette = map.scenery === "city"
+    ? { top: 0x06162b, horizon: 0x37789e, ground: 0x08111b, sun: 0xa8e7ff, direction: new THREE.Vector3(0.62, 0.32, -0.72) }
+    : map.scenery === "canyon"
+      ? { top: 0x315574, horizon: 0xf4a86e, ground: 0x6a3428, sun: 0xffe0a6, direction: new THREE.Vector3(0.56, 0.25, -0.8) }
+      : { top: 0x476d80, horizon: 0xd8c69a, ground: 0x20372f, sun: 0xffedbd, direction: new THREE.Vector3(-0.42, 0.3, -0.86) };
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    uniforms: {
+      topColor: { value: new THREE.Color(palette.top) },
+      horizonColor: { value: new THREE.Color(palette.horizon) },
+      groundColor: { value: new THREE.Color(palette.ground) },
+      sunColor: { value: new THREE.Color(palette.sun) },
+      sunDirection: { value: palette.direction.normalize() },
+    },
+    vertexShader: `
+      varying vec3 vDirection;
+      void main() {
+        vDirection = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 topColor;
+      uniform vec3 horizonColor;
+      uniform vec3 groundColor;
+      uniform vec3 sunColor;
+      uniform vec3 sunDirection;
+      varying vec3 vDirection;
+      void main() {
+        float heightMix = smoothstep(-0.08, 0.54, vDirection.y);
+        vec3 color = mix(groundColor, horizonColor, smoothstep(-0.18, 0.08, vDirection.y));
+        color = mix(color, topColor, heightMix);
+        float sunDot = max(dot(normalize(vDirection), sunDirection), 0.0);
+        float sunDisc = pow(sunDot, 880.0);
+        float sunGlow = pow(sunDot, 27.0) * 0.18;
+        color += sunColor * (sunDisc * 1.45 + sunGlow);
+        float horizonGlow = 1.0 - smoothstep(0.0, 0.34, abs(vDirection.y));
+        color += horizonColor * horizonGlow * 0.11;
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(460, 40, 24), material);
+  sky.frustumCulled = false;
+  sky.renderOrder = -100;
+  skyWorld.add(sky);
+}
+
 function applyMapBackdrop(map) {
   // The drive no longer uses a photographic horizon. Only the procedural sky
   // remains fixed; every structure below it is realtime geometry that passes
   // the camera and produces genuine parallax.
-  scene.background = createReflectionEnvironment(map);
+  scene.background = new THREE.Color(map.sky);
+  buildProceduralSky(map);
 }
 
 function createTerrainTexture(map) {
@@ -1714,13 +1773,25 @@ function createCanyonScenery(side, index) {
   const mesaCount = index % 3 === 0 ? 2 : index % 3 === 1 ? 1 : 0;
   for (let mesaIndex = 0; mesaIndex < mesaCount; mesaIndex += 1) {
     const height = 10 + ((index * 7 + mesaIndex * 5) % 7) * 1.45;
-    const mesa = new THREE.Mesh(sceneryGeometry.mesa, mesaMaterials[(index + mesaIndex) % 2]);
-    mesa.scale.set(7.5 + mesaIndex * 2.2, height, 6.2 + (index % 3));
-    mesa.position.set(side * (27 + mesaIndex * 12 + (index % 3) * 2.4), height * 0.47 - 0.4, -9 + mesaIndex * 13 + (index % 4));
-    mesa.rotation.y = index * 0.37 + mesaIndex * 0.83;
-    mesa.castShadow = mesaIndex === 0;
-    mesa.receiveShadow = true;
-    group.add(mesa);
+    const formation = new THREE.Group();
+    const formationX = side * (27 + mesaIndex * 13 + (index % 3) * 2.8);
+    const formationZ = -9 + mesaIndex * 13 + (index % 4);
+    [0, 1, 2].forEach(function (part) {
+      const cliff = new THREE.Mesh(sceneryGeometry.cliff, mesaMaterials[(index + mesaIndex + part) % 2]);
+      const partHeight = height * (part === 0 ? 0.62 : part === 1 ? 0.45 : 0.34);
+      const partWidth = (7.6 + mesaIndex * 1.9) * (part === 0 ? 1 : part === 1 ? 0.74 : 0.58);
+      cliff.scale.set(partWidth, partHeight, 6.4 + ((index + part) % 3) * 1.6);
+      cliff.position.set(
+        formationX + side * (part === 0 ? 0 : part === 1 ? partWidth * 0.55 : -partWidth * 0.48),
+        partHeight * 0.64 + part * height * 0.13 - 0.8,
+        formationZ + (part - 1) * 3.4,
+      );
+      cliff.rotation.set((part - 1) * 0.05, index * 0.29 + part * 0.67, side * (part - 1) * 0.055);
+      cliff.castShadow = mesaIndex === 0 && part === 0;
+      cliff.receiveShadow = true;
+      formation.add(cliff);
+    });
+    group.add(formation);
   }
 
   const shrubCount = index % 4 === 1 ? 1 : 0;
@@ -1788,13 +1859,18 @@ function createForestScenery(side, index) {
     trunk.position.y = height * 0.17;
     trunk.castShadow = treeIndex === 0;
     tree.add(trunk);
-    const foliage = foliageMaterials[(index + treeIndex) % foliageMaterials.length];
-    [0, 1, 2].forEach(function (layer) {
+    [0, 1, 2, 3, 4].forEach(function (layer) {
+      const foliage = foliageMaterials[(index + treeIndex + layer) % foliageMaterials.length];
       const branches = new THREE.Mesh(sceneryGeometry.pineCone, foliage);
-      const layerWidth = width * (1 - layer * 0.18);
-      branches.scale.set(layerWidth, height * 0.48, layerWidth);
-      branches.position.y = height * (0.31 + layer * 0.2);
+      const layerWidth = width * (1 - layer * 0.12) * (0.94 + ((index + treeIndex + layer) % 3) * 0.035);
+      branches.scale.set(layerWidth, height * (0.39 + (layer % 2) * 0.018), layerWidth * (0.88 + ((index + layer) % 2) * 0.09));
+      branches.position.set(
+        ((index + layer) % 2 ? -1 : 1) * width * 0.035,
+        height * (0.27 + layer * 0.13),
+        ((treeIndex + layer) % 2 ? 1 : -1) * width * 0.025,
+      );
       branches.rotation.y = index * 0.17 + treeIndex * 0.41 + layer * 0.67;
+      branches.rotation.z = ((index + layer) % 2 ? -1 : 1) * 0.025;
       branches.castShadow = treeIndex === 0 && layer === 0;
       branches.receiveShadow = true;
       tree.add(branches);
