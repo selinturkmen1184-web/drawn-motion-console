@@ -343,8 +343,9 @@ const sceneryGeometry = {
   cube: new THREE.BoxGeometry(1, 1, 1),
   rock: new THREE.IcosahedronGeometry(1, 1),
   shrub: new THREE.DodecahedronGeometry(0.5, 0),
-  mesa: new THREE.CylinderGeometry(0.72, 1, 1, 7),
+  mesa: new THREE.CylinderGeometry(0.72, 1, 1, 12),
   trunk: new THREE.CylinderGeometry(0.1, 0.16, 1, 7),
+  pineCone: new THREE.ConeGeometry(0.5, 1, 14),
   pinePlane: new THREE.PlaneGeometry(1, 1),
 };
 
@@ -740,59 +741,10 @@ function getSceneryMaterial(key, factory) {
 }
 
 function applyMapBackdrop(map) {
-  scene.background = new THREE.Color(map.sky);
-  if (!map.backdrop) return;
-  if (environmentTextureCache.has(map.id)) {
-    scene.background = environmentTextureCache.get(map.id);
-    return;
-  }
-  textureLoader.load(map.backdrop, function (sourceTexture) {
-    const source = sourceTexture.image;
-    const backdropCanvas = document.createElement("canvas");
-    backdropCanvas.width = 2048;
-    backdropCanvas.height = 1024;
-    const context = backdropCanvas.getContext("2d");
-    const sourceRatio = source.width / source.height;
-    const targetRatio = backdropCanvas.width / backdropCanvas.height;
-    const drawHeight = sourceRatio > targetRatio ? backdropCanvas.height : backdropCanvas.width / sourceRatio;
-    const drawWidth = sourceRatio > targetRatio ? backdropCanvas.height * sourceRatio : backdropCanvas.width;
-    context.drawImage(source, (backdropCanvas.width - drawWidth) * 0.5, (backdropCanvas.height - drawHeight) * 0.42, drawWidth, drawHeight);
-
-    // Natural routes keep more of their cinematic valley walls visible while
-    // the lower road corridor still dissolves into the moving 3D asphalt.
-    // City retains the stronger masking used by its dense realtime skyline.
-    const fogColor = new THREE.Color(map.fog);
-    const red = Math.round(fogColor.r * 255);
-    const green = Math.round(fogColor.g * 255);
-    const blue = Math.round(fogColor.b * 255);
-    const naturalRoute = map.scenery !== "city";
-    const lowerMask = context.createLinearGradient(
-      0,
-      backdropCanvas.height * (naturalRoute ? 0.53 : 0.38),
-      0,
-      backdropCanvas.height,
-    );
-    lowerMask.addColorStop(0, "rgba(" + red + "," + green + "," + blue + ",0)");
-    lowerMask.addColorStop(naturalRoute ? 0.48 : 0.42, "rgba(" + red + "," + green + "," + blue + "," + (naturalRoute ? ".28" : ".72") + ")");
-    lowerMask.addColorStop(1, "rgba(" + red + "," + green + "," + blue + "," + (naturalRoute ? ".86" : "1") + ")");
-    context.fillStyle = lowerMask;
-    context.fillRect(0, 0, backdropCanvas.width, backdropCanvas.height);
-    const sideMask = context.createLinearGradient(0, 0, backdropCanvas.width, 0);
-    sideMask.addColorStop(0, "rgba(" + red + "," + green + "," + blue + "," + (naturalRoute ? ".12" : ".7") + ")");
-    sideMask.addColorStop(0.26, "rgba(" + red + "," + green + "," + blue + ",0)");
-    sideMask.addColorStop(0.74, "rgba(" + red + "," + green + "," + blue + ",0)");
-    sideMask.addColorStop(1, "rgba(" + red + "," + green + "," + blue + "," + (naturalRoute ? ".12" : ".7") + ")");
-    context.fillStyle = sideMask;
-    context.fillRect(0, 0, backdropCanvas.width, backdropCanvas.height);
-
-    const texture = new THREE.CanvasTexture(backdropCanvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    environmentTextureCache.set(map.id, texture);
-    sourceTexture.dispose();
-    if (currentMapTheme === map.id || (state.race && state.race.map.id === map.id)) scene.background = texture;
-  });
+  // The drive no longer uses a photographic horizon. Only the procedural sky
+  // remains fixed; every structure below it is realtime geometry that passes
+  // the camera and produces genuine parallax.
+  scene.background = createReflectionEnvironment(map);
 }
 
 function createTerrainTexture(map) {
@@ -1730,10 +1682,7 @@ function createCanyonScenery(side, index) {
   const timberMaterial = getSceneryMaterial("canyon-utility-timber", function () { return makeMaterial(0x4a372b, 0.92, 0.02); });
   const cableMaterial = getSceneryMaterial("canyon-utility-cable", function () { return makeMaterial(0x242423, 0.62, 0.28); });
 
-  // The distant cliff mass now comes from the photographic horizon. Nearby
-  // geometry is deliberately lower and irregular so it reads as real roadside
-  // geology instead of a row of repeated cylinders.
-  const rockCount = 0;
+  const rockCount = 3;
   for (let rockIndex = 0; rockIndex < rockCount; rockIndex += 1) {
     const rock = new THREE.Mesh(sceneryGeometry.rock, rockMaterials[(index + rockIndex) % rockMaterials.length]);
     const scale = 0.72 + ((index * 3 + rockIndex * 5) % 5) * 0.17;
@@ -1748,6 +1697,30 @@ function createCanyonScenery(side, index) {
     rock.castShadow = rockIndex === 0;
     rock.receiveShadow = true;
     group.add(rock);
+  }
+
+  const mesaMaterials = [0, 1].map(function (shade) {
+    return getSceneryMaterial("canyon-mesa-" + shade, function () {
+      return new THREE.MeshStandardMaterial({
+        color: [0x7f4d39, 0xa56749][shade],
+        map: rockTextures.color,
+        bumpMap: rockTextures.relief,
+        bumpScale: 0.18,
+        roughness: 1,
+        flatShading: true,
+      });
+    });
+  });
+  const mesaCount = index % 3 === 0 ? 2 : index % 3 === 1 ? 1 : 0;
+  for (let mesaIndex = 0; mesaIndex < mesaCount; mesaIndex += 1) {
+    const height = 10 + ((index * 7 + mesaIndex * 5) % 7) * 1.45;
+    const mesa = new THREE.Mesh(sceneryGeometry.mesa, mesaMaterials[(index + mesaIndex) % 2]);
+    mesa.scale.set(7.5 + mesaIndex * 2.2, height, 6.2 + (index % 3));
+    mesa.position.set(side * (27 + mesaIndex * 12 + (index % 3) * 2.4), height * 0.47 - 0.4, -9 + mesaIndex * 13 + (index % 4));
+    mesa.rotation.y = index * 0.37 + mesaIndex * 0.83;
+    mesa.castShadow = mesaIndex === 0;
+    mesa.receiveShadow = true;
+    group.add(mesa);
   }
 
   const shrubCount = index % 4 === 1 ? 1 : 0;
@@ -1785,14 +1758,10 @@ function createForestScenery(side, index) {
   const foliageMaterials = [0, 1, 2].map(function (shade) {
     return getSceneryMaterial("forest-natural-foliage-" + shade, function () {
       return new THREE.MeshStandardMaterial({
-        color: [0x91a096, 0x74877c, 0xa6afa7][shade],
-        map: getPineTexture(),
-        transparent: true,
-        alphaTest: 0.3,
-        side: THREE.DoubleSide,
+        color: [0x315a45, 0x234536, 0x47705a][shade],
         roughness: 0.98,
         metalness: 0,
-        depthWrite: true,
+        flatShading: false,
       });
     });
   });
@@ -1808,10 +1777,8 @@ function createForestScenery(side, index) {
     });
   });
 
-  // Three crossed branch-texture planes form a detailed, camera-safe tree.
-  // Unlike the old single repeated silhouette, height, width, colour and
-  // rotation vary per cluster while the geometry continues to move in 3D.
-  const treeCount = 1 + (index % 2);
+  // Layered cone canopies make each tree volumetric from every camera angle.
+  const treeCount = 2 + (index % 2);
   for (let treeIndex = 0; treeIndex < treeCount; treeIndex += 1) {
     const height = 6.8 + ((index * 7 + treeIndex * 5) % 8) * 0.62;
     const width = height * (0.47 + ((index + treeIndex) % 3) * 0.03);
@@ -1822,12 +1789,14 @@ function createForestScenery(side, index) {
     trunk.castShadow = treeIndex === 0;
     tree.add(trunk);
     const foliage = foliageMaterials[(index + treeIndex) % foliageMaterials.length];
-    [0, Math.PI / 3, Math.PI * 2 / 3].forEach(function (rotation, planeIndex) {
-      const branches = new THREE.Mesh(sceneryGeometry.pinePlane, foliage);
-      branches.scale.set(width, height, 1);
-      branches.position.y = height * 0.5;
-      branches.rotation.y = rotation;
-      branches.castShadow = treeIndex === 0 && planeIndex === 0;
+    [0, 1, 2].forEach(function (layer) {
+      const branches = new THREE.Mesh(sceneryGeometry.pineCone, foliage);
+      const layerWidth = width * (1 - layer * 0.18);
+      branches.scale.set(layerWidth, height * 0.48, layerWidth);
+      branches.position.y = height * (0.31 + layer * 0.2);
+      branches.rotation.y = index * 0.17 + treeIndex * 0.41 + layer * 0.67;
+      branches.castShadow = treeIndex === 0 && layer === 0;
+      branches.receiveShadow = true;
       tree.add(branches);
     });
     tree.position.set(
@@ -1837,6 +1806,18 @@ function createForestScenery(side, index) {
     );
     tree.rotation.y = index * 0.31 + treeIndex * 0.73;
     group.add(tree);
+  }
+
+  if (index % 3 === 0) {
+    const mountainMaterial = getSceneryMaterial("forest-mountain", function () {
+      return new THREE.MeshStandardMaterial({ color: 0x52645f, roughness: 1, flatShading: true });
+    });
+    const mountain = new THREE.Mesh(sceneryGeometry.rock, mountainMaterial);
+    mountain.scale.set(13 + index % 5, 10 + index % 4, 12 + index % 3);
+    mountain.position.set(side * (39 + index % 4 * 3), 5.5, -8 + index % 5 * 3.2);
+    mountain.rotation.set(0.08, index * 0.31, side * 0.04);
+    mountain.receiveShadow = true;
+    group.add(mountain);
   }
 
   const forestRockCount = index % 3 === 0 ? 1 : 0;
