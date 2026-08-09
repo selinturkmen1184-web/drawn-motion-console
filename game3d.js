@@ -335,6 +335,7 @@ const textureLoader = new THREE.TextureLoader();
 let cityFacadeTexture = null;
 let pineTexture = null;
 let scotsPineTexture = null;
+let redRockTexture = null;
 let asphaltTexture = null;
 let asphaltReliefTexture = null;
 let canyonRockTexture = null;
@@ -973,6 +974,16 @@ function getPineTexture(species) {
   if (isScotsPine) scotsPineTexture = texture;
   else pineTexture = texture;
   return texture;
+}
+
+function getRedRockTexture() {
+  if (redRockTexture) return redRockTexture;
+  redRockTexture = textureLoader.load("./maps/red-rock-ai-v43.webp");
+  redRockTexture.colorSpace = THREE.SRGBColorSpace;
+  redRockTexture.minFilter = THREE.LinearMipmapLinearFilter;
+  redRockTexture.magFilter = THREE.LinearFilter;
+  redRockTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
+  return redRockTexture;
 }
 
 function getCanyonRockTextures() {
@@ -1746,6 +1757,19 @@ function createCityScenery(side, index, map) {
 function createCanyonScenery(side, index) {
   const group = new THREE.Group();
   const rockTextures = getCanyonRockTextures();
+  const formationMaterials = [0, 1].map(function (shade) {
+    return getSceneryMaterial("canyon-photo-formation-" + shade, function () {
+      return new THREE.MeshBasicMaterial({
+        map: getRedRockTexture(),
+        color: [0xffffff, 0xe8c0a7][shade],
+        transparent: true,
+        alphaTest: 0.18,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+        fog: true,
+      });
+    });
+  });
   const rockMaterials = [0, 1, 2].map(function (shade) {
     return getSceneryMaterial("canyon-natural-rock-" + shade, function () {
       return new THREE.MeshStandardMaterial({
@@ -1762,6 +1786,16 @@ function createCanyonScenery(side, index) {
   const scrubMaterials = [0, 1].map(function (shade) {
     return getSceneryMaterial("canyon-natural-scrub-" + shade, function () {
       return new THREE.MeshStandardMaterial({ color: [0x77734b, 0x4f5e3d][shade], roughness: 1, flatShading: true });
+    });
+  });
+  const cactusMaterials = [0, 1].map(function (shade) {
+    return getSceneryMaterial("canyon-cactus-" + shade, function () {
+      return new THREE.MeshStandardMaterial({
+        color: [0x4f6842, 0x354c32][shade],
+        roughness: 0.96,
+        metalness: 0,
+        flatShading: false,
+      });
     });
   });
   const timberMaterial = getSceneryMaterial("canyon-utility-timber", function () { return makeMaterial(0x4a372b, 0.92, 0.02); });
@@ -1784,42 +1818,19 @@ function createCanyonScenery(side, index) {
     group.add(rock);
   }
 
-  const mesaMaterials = [0, 1].map(function (shade) {
-    return getSceneryMaterial("canyon-mesa-" + shade, function () {
-      return new THREE.MeshStandardMaterial({
-        color: [0x7f4d39, 0xa56749][shade],
-        map: rockTextures.color,
-        bumpMap: rockTextures.relief,
-        bumpScale: 0.18,
-        roughness: 1,
-        flatShading: false,
-      });
-    });
-  });
-  const mesaCount = index % 3 === 0 ? 2 : index % 3 === 1 ? 1 : 0;
-  for (let mesaIndex = 0; mesaIndex < mesaCount; mesaIndex += 1) {
-    const height = 10 + ((index * 7 + mesaIndex * 5) % 7) * 1.45;
-    const formation = new THREE.Group();
-    const formationX = side * (27 + mesaIndex * 13 + (index % 3) * 2.8);
-    const formationZ = -9 + mesaIndex * 13 + (index % 4);
-    [0, 1, 2].forEach(function (part) {
-      const cliff = new THREE.Mesh(
-        sceneryGeometry.mesaFormations[(index + mesaIndex + part) % sceneryGeometry.mesaFormations.length],
-        mesaMaterials[(index + mesaIndex + part) % 2],
-      );
-      const partHeight = height * (part === 0 ? 0.88 : part === 1 ? 0.67 : 0.5);
-      const partWidth = (5.8 + mesaIndex * 1.55) * (part === 0 ? 1 : part === 1 ? 0.72 : 0.57);
-      cliff.scale.set(partWidth, partHeight, 5.3 + ((index + part) % 3) * 1.25);
-      cliff.position.set(
-        formationX + side * (part === 0 ? 0 : part === 1 ? partWidth * 0.55 : -partWidth * 0.48),
-        partHeight * 0.5 + part * height * 0.08 - 0.38,
-        formationZ + (part - 1) * 3.4,
-      );
-      cliff.rotation.set((part - 1) * 0.05, index * 0.29 + part * 0.67, side * (part - 1) * 0.055);
-      cliff.castShadow = mesaIndex === 0 && part === 0;
-      cliff.receiveShadow = true;
-      formation.add(cliff);
-    });
+  const hasPhotographicFormation = index % 7 === 0 || index % 11 === 3;
+  if (hasPhotographicFormation) {
+    const height = 7.4 + (index % 4) * 0.72;
+    const formation = new THREE.Mesh(sceneryGeometry.pinePlane, formationMaterials[index % formationMaterials.length]);
+    formation.scale.set(height * (1.62 + (index % 3) * 0.07), height, 1);
+    formation.position.set(
+      side * (38 + (index % 5) * 4.8),
+      height * 0.49 - 0.2,
+      -12 + (index % 6) * 4.5,
+    );
+    formation.rotation.y = side * (0.05 + (index % 3) * 0.025);
+    formation.renderOrder = -4;
+    formation.userData.isDistantFormation = true;
     group.add(formation);
   }
 
@@ -1831,6 +1842,30 @@ function createCanyonScenery(side, index) {
     scrub.position.set(side * (13.6 + (index % 3) * 1.15), shrubScale * 0.28, -5 + (index % 4) * 4.1);
     scrub.rotation.y = index * 0.52 + shrubIndex;
     group.add(scrub);
+  }
+
+  if (index % 5 === 2) {
+    const cactus = new THREE.Group();
+    const cactusHeight = 2.25 + (index % 4) * 0.34;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, cactusHeight, 11), cactusMaterials[index % 2]);
+    trunk.position.y = cactusHeight * 0.5;
+    trunk.castShadow = true;
+    cactus.add(trunk);
+    [-1, 1].forEach(function (armSide, armIndex) {
+      if ((index + armIndex) % 3 === 0) return;
+      const armY = cactusHeight * (0.46 + armIndex * 0.17);
+      const armLength = 0.5 + ((index + armIndex) % 3) * 0.12;
+      const horizontal = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, armLength, 9), cactusMaterials[(index + armIndex) % 2]);
+      horizontal.rotation.z = Math.PI / 2;
+      horizontal.position.set(armSide * armLength * 0.42, armY, 0);
+      const uprightHeight = 0.62 + armIndex * 0.16;
+      const upright = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.11, uprightHeight, 9), cactusMaterials[(index + armIndex) % 2]);
+      upright.position.set(armSide * armLength * 0.78, armY + uprightHeight * 0.43, 0);
+      cactus.add(horizontal, upright);
+    });
+    cactus.position.set(side * (14.2 + (index % 3) * 1.45), -0.08, 4 - (index % 4) * 3.6);
+    cactus.rotation.y = index * 0.71;
+    group.add(cactus);
   }
 
   if (side > 0 && index % 5 === 0) {
@@ -2356,6 +2391,21 @@ function buildRoad(map) {
     roughness: 0.34,
     metalness: 0.2,
   });
+  const roadWearMaterial = new THREE.MeshStandardMaterial({
+    color: map.scenery === "city" ? 0x0c1117 : 0x121315,
+    roughness: 0.96,
+    metalness: 0,
+    transparent: true,
+    opacity: map.scenery === "city" ? 0.035 : 0.07,
+    depthWrite: false,
+  });
+  const rumbleStripMaterial = new THREE.MeshStandardMaterial({
+    color: map.scenery === "canyon" ? 0xb56343 : 0xd7d7cd,
+    roughness: 0.72,
+    metalness: 0.02,
+  });
+  const roadWearGeometry = new THREE.PlaneGeometry(0.42, SEGMENT_LENGTH + 0.7);
+  const rumbleGeometry = new THREE.BoxGeometry(0.3, 0.026, 1.35);
   const beaconMaterial = new THREE.MeshBasicMaterial({ color: map.accent });
   const signMaterial = new THREE.MeshStandardMaterial({
     color: map.scenery === "canyon" ? 0x5e2e22 : map.scenery === "forest" ? 0x173f31 : 0x172c43,
@@ -2389,6 +2439,15 @@ function buildRoad(map) {
       segment.add(repair);
     }
 
+    LANE_X.forEach(function (laneX) {
+      [-0.72, 0.72].forEach(function (wheelOffset) {
+        const wear = new THREE.Mesh(roadWearGeometry, roadWearMaterial);
+        wear.rotation.x = -Math.PI / 2;
+        wear.position.set(laneX + wheelOffset, 0.006, 0);
+        segment.add(wear);
+      });
+    });
+
     if (map.scenery === "city" && index % 2 === 0) {
       [-1, 1].forEach(function (side) {
         const wetPatch = new THREE.Mesh(
@@ -2420,6 +2479,17 @@ function buildRoad(map) {
       const edgeGlow = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.025, SEGMENT_LENGTH + 0.75), edgeGlowMaterial);
       edgeGlow.position.set(side * 8.82, 0.018, 0);
       segment.add(edgeGlow);
+      if (map.scenery !== "city") {
+        const rumbleStrip = new THREE.InstancedMesh(rumbleGeometry, rumbleStripMaterial, 9);
+        const rumbleMatrix = new THREE.Matrix4();
+        for (let rumbleIndex = 0; rumbleIndex < 9; rumbleIndex += 1) {
+          rumbleMatrix.makeTranslation(side * 8.93, 0.026, -18 + rumbleIndex * 4.5);
+          rumbleStrip.setMatrixAt(rumbleIndex, rumbleMatrix);
+        }
+        rumbleStrip.instanceMatrix.needsUpdate = true;
+        rumbleStrip.receiveShadow = true;
+        segment.add(rumbleStrip);
+      }
       if (index % 2 === 0) {
         for (let marker = -16; marker <= 16; marker += 8) {
           const roadStud = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.035, 0.22), reflectorMaterial);
@@ -2954,6 +3024,14 @@ function updateWorld(dt, time) {
   roadSegments.forEach(function (segment) {
     const previousSegmentZ = segment.position.z;
     segment.position.z += travel;
+    segment.children.forEach(function (child) {
+      if (!child.userData || !child.userData.isSceneryCluster) return;
+      child.children.forEach(function (sceneryItem) {
+        if (!sceneryItem.userData || !sceneryItem.userData.isDistantFormation) return;
+        const formationWorldZ = segment.position.z + child.position.z + sceneryItem.position.z;
+        sceneryItem.visible = formationWorldZ < -72;
+      });
+    });
     const landmark = segment.userData.landmark;
     if (landmark) {
       const previousLandmarkZ = previousSegmentZ + landmark.position.z;
