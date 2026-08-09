@@ -9,7 +9,7 @@
     <meta property="og:description" content="Two collector cars, three routes, one living automotive archive." />
     <meta property="og:image" content="./og-v29.jpg" />
     <title>TheDrawnMotion — Collector's Run</title>
-    <link rel="stylesheet" href="./styles.css?v=cinematic-depth-43b" />
+    <link rel="stylesheet" href="./styles.css?v=console-gameplay-44" />
   </head>
   <body>
     <div class="noise" aria-hidden="true"></div>
@@ -63,7 +63,7 @@
             <div class="edition-seal"><small>ACTIVE</small><b>02</b><small>MODELS</small></div>
             <div class="route-line"></div>
           </div>
-          <div class="home-footer"><span>BUILD 43 / CINEMATIC DEPTH</span><span>KEYBOARD · TOUCH · GAMEPAD</span></div>
+          <div class="home-footer"><span>BUILD 44 / CONSOLE GAMEPLAY</span><span>KEYBOARD · TOUCH · GAMEPAD</span></div>
         </section>
 
         <section class="screen selection-screen" id="vehicleScreen" aria-labelledby="vehicleTitle">
@@ -117,31 +117,36 @@
         <section class="screen selection-screen" id="mapScreen" aria-labelledby="mapTitle">
           <div class="screen-heading">
             <div><p class="kicker">ROUTE / 02</p><h2 id="mapTitle">CHOOSE<br />YOUR ROUTE</h2></div>
-            <p>Three endless worlds. Traffic intensifies every lap while four lost archive pages wait on the road.</p>
+            <p>Choose a timed archive contract with a real finish condition, or enter endless survival and chase the distance record.</p>
           </div>
           <div class="route-preview" id="routePreview" data-map="city">
             <div class="route-preview-shade" aria-hidden="true"></div>
-            <div class="route-preview-copy"><small id="routePreviewKicker">NIGHT / ASPHALT</small><strong id="routePreviewTitle">NEON CITY CIRCUIT</strong><span id="routePreviewMeta">ENDLESS · MEDIUM · 4 ARCHIVE PAGES</span></div>
+            <div class="route-preview-copy"><small id="routePreviewKicker">NIGHT / ASPHALT</small><strong id="routePreviewTitle">NEON CITY CIRCUIT</strong><span id="routePreviewMeta">ARCHIVE CONTRACT · 64 SEC · 4 PAGES</span></div>
             <div class="route-preview-checkers" aria-hidden="true"></div>
           </div>
           <div class="map-grid">
             <article class="map-card selected" data-map="city" tabindex="0">
               <div class="map-visual city-map"><div class="city-skyline"></div><div class="map-road"></div><span>01</span></div>
-              <div class="map-copy"><p>NIGHT / ASPHALT</p><h3>NEON CITY<br />CIRCUIT</h3><div><span>ENDLESS</span><span>MEDIUM</span><span class="best-time" data-best="city">BEST — KM</span></div></div>
+              <div class="map-copy"><p>NIGHT / ASPHALT</p><h3>NEON CITY<br />CIRCUIT</h3><div><span class="map-mode-label">CONTRACT</span><span>MEDIUM</span><span class="best-time" data-best="city">BEST —</span></div></div>
               <i class="map-check">✓</i>
             </article>
             <article class="map-card" data-map="canyon" tabindex="0">
               <div class="map-visual canyon-map"><div class="canyon-sun"></div><div class="map-road"></div><span>02</span></div>
-              <div class="map-copy"><p>SUNSET / DUST</p><h3>RED ROCK<br />EXPEDITION</h3><div><span>ENDLESS</span><span>HARD</span><span class="best-time" data-best="canyon">BEST — KM</span></div></div>
+              <div class="map-copy"><p>SUNSET / DUST</p><h3>RED ROCK<br />EXPEDITION</h3><div><span class="map-mode-label">CONTRACT</span><span>HARD</span><span class="best-time" data-best="canyon">BEST —</span></div></div>
               <i class="map-check">✓</i>
             </article>
             <article class="map-card" data-map="forest" tabindex="0">
               <div class="map-visual forest-map"><div class="forest-pines"></div><div class="map-road"></div><span>03</span></div>
-              <div class="map-copy"><p>DAWN / MOUNTAIN</p><h3>ALPINE INK<br />RUN</h3><div><span>ENDLESS</span><span>EXPERT</span><span class="best-time" data-best="forest">BEST — KM</span></div></div>
+              <div class="map-copy"><p>DAWN / MOUNTAIN</p><h3>ALPINE INK<br />RUN</h3><div><span class="map-mode-label">CONTRACT</span><span>EXPERT</span><span class="best-time" data-best="forest">BEST —</span></div></div>
               <i class="map-check">✓</i>
             </article>
           </div>
-          <div class="selection-actions"><button class="back-button" type="button" data-screen-target="vehicle">← BACK</button><button class="primary-button compact" id="raceButton" type="button"><span>START RUN</span><i>↗</i></button></div>
+          <div class="drive-mode-selector" aria-label="Driving mode">
+            <button class="selected" type="button" data-mode="contract" aria-pressed="true"><small>01 / CAMPAIGN</small><b>ARCHIVE CONTRACT</b><span>Finish the route, recover all four pages and beat the clock.</span></button>
+            <button type="button" data-mode="endless" aria-pressed="false"><small>02 / SURVIVAL</small><b>ENDLESS RUN</b><span>One collision ends the run. Traffic intensifies without limit.</span></button>
+            <div class="token-bank"><small>ARCHIVE TOKENS</small><b id="archiveTokenCount">00</b><span>First clear reward</span></div>
+          </div>
+          <div class="selection-actions"><button class="back-button" type="button" data-screen-target="vehicle">← BACK</button><button class="primary-button compact" id="raceButton" type="button"><span>START CONTRACT</span><i>↗</i></button></div>
         </section>
 
         <section class="screen game-screen" id="gameScreen" aria-label="Driving screen">
@@ -149,7 +154,7 @@
           <div class="game-hud">
             <div class="hud-left">
               <div class="hud-vehicle"><img id="hudVehicleImage" src="./cars/silverado-front.jpg" alt="Selected vehicle" /><span><small id="hudClass">ADVENTURE CLASS</small><b id="hudVehicle">OVERLAND SILVERADO</b></span></div>
-              <div class="mission"><small>ARCHIVE MISSION</small><span>RECOVER LOST SKETCHES</span><b><i id="pagePips"></i><em id="pageCounter">0 / 4</em></b></div>
+              <div class="mission"><small id="missionKicker">ARCHIVE CONTRACT</small><span id="missionObjective">RECOVER 4 PAGES · REACH FINISH</span><b><i id="pagePips"></i><em id="pageCounter">0 / 4</em></b><em class="mission-status" id="missionStatus">FINISH BEFORE TIME EXPIRES</em></div>
             </div>
             <div class="hud-center"><small id="hudMap">NEON CITY CIRCUIT · LAP 1</small><div class="track-progress"><i id="trackProgress"></i><span id="distanceLabel">0.0 KM · SURVIVAL</span></div></div>
             <div class="hud-right"><button id="cameraButton" type="button" aria-label="Change chase camera">CAM 1</button><button id="orbitButton" type="button" aria-label="Toggle interactive 360 degree vehicle camera">360° VIEW</button><button id="pauseButton" type="button" aria-label="Pause game">Ⅱ</button><div><small>TIME</small><b id="timeLabel">00:00.0</b></div></div>
@@ -184,7 +189,7 @@
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="howTitle">
           <button class="modal-close" id="howClose" type="button" aria-label="Close">×</button>
           <p class="kicker">DRIVER PROTOCOL / 04</p><h2 id="howTitle">BEFORE YOU<br />HIT THE ROAD</h2>
-          <ol><li><b>01</b><span>Inspect your car in the 360° showroom, then choose one of three endless routes.</span></li><li><b>02</b><span>Change lanes, use SHIFT for boost, C for chase cameras and V for the interactive 360° driving view.</span></li><li><b>03</b><span>One collision ends the run. Traffic density and difficulty increase as long as you stay clean.</span></li><li><b>04</b><span>Earn boost through near misses, recover four sketch pages and set a new distance record.</span></li></ol>
+          <ol><li><b>01</b><span>Inspect your car in the 360° showroom, choose a route, then select Archive Contract or Endless Run.</span></li><li><b>02</b><span>Change lanes, use SHIFT for boost, C for chase cameras and V for the interactive 360° driving view.</span></li><li><b>03</b><span>In Archive Contract, recover all four pages and reach the finish before time expires. A first clear earns an Archive Token.</span></li><li><b>04</b><span>In Endless Run, one collision ends the run while traffic and difficulty continue to increase.</span></li></ol>
           <button class="primary-button full" id="howStart" type="button"><span>CHOOSE DRIVER</span><i>→</i></button>
         </div>
       </div>
@@ -197,6 +202,6 @@
         }
       }
     </script>
-  <script type="module" src="./game3d.js?v=cinematic-depth-43b"></script>
+  <script type="module" src="./game3d.js?v=console-gameplay-44"></script>
   </body>
 </html>

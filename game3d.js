@@ -131,9 +131,9 @@ const maps = {
 };
 
 const mapPresentation = {
-  city: { kicker: "NIGHT / ASPHALT", meta: "ENDLESS · MEDIUM · 4 ARCHIVE PAGES" },
-  canyon: { kicker: "SUNSET / DUST", meta: "ENDLESS · HARD · 4 ARCHIVE PAGES" },
-  forest: { kicker: "DAWN / MOUNTAIN", meta: "ENDLESS · EXPERT · 4 ARCHIVE PAGES" },
+  city: { kicker: "NIGHT / ASPHALT", difficulty: "MEDIUM" },
+  canyon: { kicker: "SUNSET / DUST", difficulty: "HARD" },
+  forest: { kicker: "DAWN / MOUNTAIN", difficulty: "EXPERT" },
 };
 
 const app = document.getElementById("app");
@@ -165,6 +165,9 @@ const routePreview = document.getElementById("routePreview");
 const routePreviewKicker = document.getElementById("routePreviewKicker");
 const routePreviewTitle = document.getElementById("routePreviewTitle");
 const routePreviewMeta = document.getElementById("routePreviewMeta");
+const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
+const archiveTokenCount = document.getElementById("archiveTokenCount");
+const raceButtonLabel = document.querySelector("#raceButton span");
 const brandIntro = document.getElementById("brandIntro");
 const introSkip = document.getElementById("introSkip");
 
@@ -189,6 +192,9 @@ const hud = {
   combo: document.getElementById("comboLabel"),
   difficulty: document.getElementById("difficultyLabel"),
   difficultyProgress: document.getElementById("difficultyProgress"),
+  missionKicker: document.getElementById("missionKicker"),
+  missionObjective: document.getElementById("missionObjective"),
+  missionStatus: document.getElementById("missionStatus"),
   boost: document.getElementById("boostBar"),
   boostLabel: document.getElementById("boostLabel"),
   radar: document.getElementById("trafficRadar"),
@@ -206,6 +212,7 @@ const state = {
   screen: "home",
   vehicle: "silverado",
   map: "city",
+  mode: "contract",
   sound: true,
   keys: { left: false, right: false, gas: false, brake: false, boost: false },
   race: null,
@@ -547,11 +554,38 @@ function formatTime(seconds) {
   return minutes + ":" + whole + "." + tenth;
 }
 
+function getRouteMeta(id) {
+  if (state.mode === "contract") return "ARCHIVE CONTRACT · " + maps[id].timeLimit + " SEC · 4 PAGES";
+  return "ENDLESS SURVIVAL · " + mapPresentation[id].difficulty + " · 4 PAGES";
+}
+
 function updateBestLabels() {
   document.querySelectorAll("[data-best]").forEach(function (element) {
-    const value = Number(localStorage.getItem("tdm-survival-best-" + element.dataset.best));
-    element.textContent = value ? "BEST " + (value / 1000).toFixed(1) + " KM" : "BEST — KM";
+    if (state.mode === "contract") {
+      const value = Number(localStorage.getItem("tdm-contract-best-" + element.dataset.best));
+      element.textContent = value ? "BEST " + formatTime(value) : "BEST —";
+    } else {
+      const value = Number(localStorage.getItem("tdm-survival-best-" + element.dataset.best));
+      element.textContent = value ? "BEST " + (value / 1000).toFixed(1) + " KM" : "BEST — KM";
+    }
   });
+  archiveTokenCount.textContent = Number(localStorage.getItem("tdm-archive-tokens") || 0).toString().padStart(2, "0");
+}
+
+function selectMode(mode) {
+  if (mode !== "contract" && mode !== "endless") return;
+  state.mode = mode;
+  modeButtons.forEach(function (button) {
+    const selected = button.dataset.mode === mode;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+  document.querySelectorAll(".map-mode-label").forEach(function (label) {
+    label.textContent = mode === "contract" ? "CONTRACT" : "ENDLESS";
+  });
+  routePreviewMeta.textContent = getRouteMeta(state.map);
+  raceButtonLabel.textContent = mode === "contract" ? "START CONTRACT" : "START SURVIVAL";
+  updateBestLabels();
 }
 
 function chooseVehicle(id) {
@@ -581,7 +615,7 @@ function chooseMap(id) {
   routePreview.dataset.map = id;
   routePreviewKicker.textContent = mapPresentation[id].kicker;
   routePreviewTitle.textContent = maps[id].name;
-  routePreviewMeta.textContent = mapPresentation[id].meta;
+  routePreviewMeta.textContent = getRouteMeta(id);
 }
 
 function buildArchiveRail() {
@@ -634,8 +668,12 @@ function bindSelectable(selector, callback, dataKey) {
 
 bindSelectable(".vehicle-select-card", chooseVehicle, "vehicle");
 bindSelectable(".map-card", chooseMap, "map");
+modeButtons.forEach(function (button) {
+  button.addEventListener("click", function () { selectMode(button.dataset.mode); });
+});
 buildArchiveRail();
 chooseMap(state.map);
+selectMode(state.mode);
 document.querySelectorAll("[data-screen-target]").forEach(function (button) {
   button.addEventListener("click", function () { showScreen(button.dataset.screenTarget); });
 });
@@ -2729,9 +2767,11 @@ async function startRace() {
     active: false,
     paused: false,
     finished: false,
+    mode: state.mode,
     speed: 0,
     distance: 0,
     elapsed: 0,
+    timeRemaining: state.mode === "contract" ? map.timeLimit : Infinity,
     playerX: 0,
     steer: 0,
     maxSpeed: 0,
@@ -2762,6 +2802,7 @@ async function startRace() {
     visualPulse: 0,
     offRoad: false,
     pages: new Set(),
+    firstClearReward: false,
     lastTime: performance.now(),
     vehicle,
     map,
@@ -2827,6 +2868,11 @@ function runCountdown() {
       countdown.classList.remove("show");
       state.race.active = true;
       state.race.lastTime = performance.now();
+      showToast(
+        state.race.mode === "contract" ? "CONTRACT LIVE · RECOVER 4 PAGES" : "ENDLESS SURVIVAL · STAY CLEAN",
+        false,
+        "GO",
+      );
     }
   }, 760);
 }
@@ -2956,6 +3002,10 @@ function updateDifficulty() {
 function updateCheckpoint() {
   const race = state.race;
   if (!race || race.distance < race.nextCheckpointDistance) return;
+  if (race.mode === "contract") {
+    finishRace(race.pages.size === 4 ? "complete" : "incomplete");
+    return;
+  }
   race.lap += 1;
   race.nextCheckpointDistance += race.map.distance;
   race.boost = Math.min(100, race.boost + 28);
@@ -3166,9 +3216,21 @@ function updateRace(dt, time) {
   race.maxSpeed = Math.max(race.maxSpeed, race.speed);
   race.distance += race.speed * dt * 0.36;
   race.elapsed += dt;
+  if (race.mode === "contract") {
+    race.timeRemaining = Math.max(0, race.timeRemaining - dt);
+    if (race.timeRemaining <= 0) {
+      finishRace("timeout");
+      updateHud();
+      return;
+    }
+  }
   race.score += race.speed * dt * 0.2 * race.combo;
   updateDifficulty();
   updateCheckpoint();
+  if (race.finished) {
+    updateHud();
+    return;
+  }
   race.comboTimer = Math.max(0, race.comboTimer - dt);
   if (race.comboTimer <= 0) race.combo = THREE.MathUtils.lerp(race.combo, 1, 1 - Math.pow(0.05, dt));
   race.collisionCooldown = Math.max(0, race.collisionCooldown - dt);
@@ -3240,11 +3302,20 @@ function updateHud() {
   const race = state.race;
   if (!race) return;
   const lapDistance = race.distance % race.map.distance;
-  const progress = Math.min(100, lapDistance / race.map.distance * 100);
+  const routeDistance = race.mode === "contract" ? Math.min(race.distance, race.map.distance) : lapDistance;
+  const progress = Math.min(100, routeDistance / race.map.distance * 100);
   hud.progress.style.width = progress + "%";
-  hud.map.textContent = race.map.name + " · LAP " + race.lap;
-  hud.distance.textContent = (race.distance / 1000).toFixed(1) + " KM · NEXT LAP " + Math.max(0, (race.nextCheckpointDistance - race.distance) / 1000).toFixed(1) + " KM";
-  hud.time.textContent = formatTime(race.elapsed);
+  hud.map.textContent = race.map.name + (race.mode === "contract" ? " · ARCHIVE CONTRACT" : " · LAP " + race.lap);
+  hud.distance.textContent = race.mode === "contract"
+    ? (race.distance / 1000).toFixed(1) + " KM · FINISH " + Math.max(0, (race.map.distance - race.distance) / 1000).toFixed(1) + " KM"
+    : (race.distance / 1000).toFixed(1) + " KM · NEXT LAP " + Math.max(0, (race.nextCheckpointDistance - race.distance) / 1000).toFixed(1) + " KM";
+  hud.time.textContent = formatTime(race.mode === "contract" ? race.timeRemaining : race.elapsed);
+  hud.time.parentElement.classList.toggle("critical", race.mode === "contract" && race.timeRemaining <= 15);
+  hud.missionKicker.textContent = race.mode === "contract" ? "ARCHIVE CONTRACT" : "SURVIVAL OBJECTIVE";
+  hud.missionObjective.textContent = race.mode === "contract" ? "RECOVER 4 PAGES · REACH FINISH" : "RECOVER LOST SKETCHES";
+  hud.missionStatus.textContent = race.mode === "contract"
+    ? "TIME " + formatTime(race.timeRemaining) + " · FINISH REQUIRED"
+    : race.nearMisses + " NEAR MISSES · LEVEL " + race.difficultyLevel;
   hud.pageCounter.textContent = race.pages.size + " / 4";
   hud.speed.textContent = Math.round(race.speed).toString().padStart(3, "0");
   hud.telemetrySpeed.textContent = Math.round(race.speed).toString().padStart(3, "0");
@@ -3271,6 +3342,8 @@ function finishRace(reason) {
   const race = state.race;
   if (!race || race.finished) return;
   const crashed = reason === "crash";
+  const contract = race.mode === "contract";
+  const success = reason === "complete";
   race.finished = true;
   race.finishPending = false;
   race.active = false;
@@ -3278,24 +3351,64 @@ function finishRace(reason) {
   updateAudio(0, race.vehicle.maxSpeed, false);
   screens.game.classList.remove("boosting", "offroad");
   const pages = race.pages.size;
-  const bestKey = "tdm-survival-best-" + race.map.id;
-  const previousBest = Number(localStorage.getItem(bestKey));
-  const newRecord = !previousBest || race.distance > previousBest;
-  if (newRecord) localStorage.setItem(bestKey, race.distance.toFixed(1));
-  const grade = crashed ? "X" : pages === 4 ? "S" : pages >= 3 ? "A" : pages >= 2 ? "B" : "C";
-  document.getElementById("resultKicker").textContent = crashed ? "SURVIVAL ENDED · COLLISION" : "SURVIVAL COMPLETE";
-  document.getElementById("resultTitle").innerHTML = crashed ? "ONE IMPACT.<br />RUN ENDED." : "A NEW<br />DISTANCE RECORD.";
+  let newRecord = false;
+  let firstClear = false;
+  if (contract && success) {
+    const bestKey = "tdm-contract-best-" + race.map.id;
+    const previousBest = Number(localStorage.getItem(bestKey));
+    newRecord = !previousBest || race.elapsed < previousBest;
+    if (newRecord) localStorage.setItem(bestKey, race.elapsed.toFixed(2));
+    const clearKey = "tdm-contract-clear-" + race.map.id;
+    firstClear = !localStorage.getItem(clearKey);
+    if (firstClear) {
+      localStorage.setItem(clearKey, "1");
+      const tokens = Number(localStorage.getItem("tdm-archive-tokens") || 0) + 1;
+      localStorage.setItem("tdm-archive-tokens", String(tokens));
+      race.firstClearReward = true;
+    }
+  } else if (!contract) {
+    const bestKey = "tdm-survival-best-" + race.map.id;
+    const previousBest = Number(localStorage.getItem(bestKey));
+    newRecord = !previousBest || race.distance > previousBest;
+    if (newRecord) localStorage.setItem(bestKey, race.distance.toFixed(1));
+  }
+  const failedContract = contract && !success;
+  const grade = success ? "S" : crashed ? "X" : failedContract ? "F" : pages === 4 ? "S" : pages >= 3 ? "A" : pages >= 2 ? "B" : "C";
+  const resultKicker = document.getElementById("resultKicker");
+  const resultTitle = document.getElementById("resultTitle");
+  if (success) {
+    resultKicker.textContent = "ARCHIVE CONTRACT · COMPLETE";
+    resultTitle.innerHTML = "ROUTE SECURED.<br />ARCHIVE UPDATED.";
+  } else if (reason === "timeout") {
+    resultKicker.textContent = "CONTRACT FAILED · TIME EXPIRED";
+    resultTitle.innerHTML = "TIME IS OUT.<br />TRY AGAIN.";
+  } else if (reason === "incomplete") {
+    resultKicker.textContent = "CONTRACT FAILED · PAGES MISSING";
+    resultTitle.innerHTML = "ARCHIVE<br />INCOMPLETE.";
+  } else {
+    resultKicker.textContent = contract ? "CONTRACT FAILED · COLLISION" : "SURVIVAL ENDED · COLLISION";
+    resultTitle.innerHTML = "ONE IMPACT.<br />RUN ENDED.";
+  }
   document.getElementById("resultImage").src = race.vehicle.resultImage;
   const resultGrade = document.getElementById("resultGrade");
   resultGrade.textContent = grade;
-  resultGrade.classList.toggle("crash", crashed);
+  resultGrade.classList.toggle("crash", crashed || failedContract);
   document.getElementById("resultTime").textContent = formatTime(race.elapsed);
   document.getElementById("resultDistance").textContent = (race.distance / 1000).toFixed(1) + " KM";
   document.getElementById("resultSpeed").textContent = Math.round(race.maxSpeed) + " KM/H";
   document.getElementById("resultScore").textContent = Math.round(race.score).toString().padStart(6, "0");
-  document.getElementById("resultMessage").textContent = (newRecord ? "NEW DISTANCE RECORD · " : "")
-    + "Lap " + race.lap + ", level " + race.difficultyLevel + " and " + (race.distance / 1000).toFixed(1)
-    + " kilometres. " + (pages === 4 ? "All lost sketches recovered." : (4 - pages) + " sketch pages remain on the road.");
+  if (contract) {
+    document.getElementById("resultMessage").textContent = success
+      ? (firstClear ? "ARCHIVE TOKEN EARNED · " : "CONTRACT REPLAYED · ")
+        + (newRecord ? "NEW BEST TIME · " : "") + "All four lost sketches recovered and the route was secured."
+      : (reason === "timeout" ? "The contract clock expired. " : reason === "incomplete" ? "The finish was reached without every page. " : "The vehicle sustained an impact. ")
+        + (4 - pages) + " sketch pages remain unarchived.";
+  } else {
+    document.getElementById("resultMessage").textContent = (newRecord ? "NEW DISTANCE RECORD · " : "")
+      + "Lap " + race.lap + ", level " + race.difficultyLevel + " and " + (race.distance / 1000).toFixed(1)
+      + " kilometres. " + (pages === 4 ? "All lost sketches recovered." : (4 - pages) + " sketch pages remain on the road.");
+  }
+  updateBestLabels();
   window.setTimeout(function () { showScreen("result"); }, 500);
 }
 
