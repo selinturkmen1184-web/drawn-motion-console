@@ -9,7 +9,7 @@
     <meta property="og:description" content="Two collector cars, three routes, one living automotive archive." />
     <meta property="og:image" content="./og-v29.jpg" />
     <title>TheDrawnMotion — Collector's Run</title>
-    <link rel="stylesheet" href="./styles.css?v=ultra-graphics-45" />
+    <link rel="stylesheet" href="./styles.css?v=living-archive-46" />
   </head>
   <body>
     <div class="noise" aria-hidden="true"></div>
@@ -45,6 +45,8 @@
             <div class="hero-actions">
               <button class="primary-button" id="startButton" type="button"><span>START DRIVING</span><i>→</i></button>
               <button class="ghost-button" id="howButton" type="button">HOW TO PLAY</button>
+              <button class="ghost-button" id="archiveButton" type="button">MY ARCHIVE</button>
+              <button class="ghost-button" id="settingsButton" type="button">SETTINGS</button>
             </div>
             <div class="control-legend">
               <span><kbd>W</kbd><kbd>↑</kbd> THROTTLE</span>
@@ -53,6 +55,7 @@
               <span><kbd>SHIFT</kbd> BOOST</span>
               <span><kbd>C</kbd> CAMERA</span>
               <span><kbd>V</kbd> 360° VIEW</span>
+              <span><kbd>P</kbd> PHOTO</span>
               <span><kbd>ESC</kbd> PAUSE</span>
             </div>
             <div class="hero-meter"><span><i></i></span><b>LIVE ARCHIVE</b><em>02 / 45 MODELS ONLINE</em></div>
@@ -63,7 +66,7 @@
             <div class="edition-seal"><small>ACTIVE</small><b>02</b><small>MODELS</small></div>
             <div class="route-line"></div>
           </div>
-          <div class="home-footer"><span>BUILD 45 / ULTRA GRAPHICS</span><span>4K SHADOWS · PBR · GAMEPAD</span></div>
+          <div class="home-footer"><span>BUILD 46 / LIVING ARCHIVE</span><span>4 MODES · DYNAMIC WORLD · PROGRESSION</span></div>
         </section>
 
         <section class="screen selection-screen" id="vehicleScreen" aria-labelledby="vehicleTitle">
@@ -117,7 +120,7 @@
         <section class="screen selection-screen" id="mapScreen" aria-labelledby="mapTitle">
           <div class="screen-heading">
             <div><p class="kicker">ROUTE / 02</p><h2 id="mapTitle">CHOOSE<br />YOUR ROUTE</h2></div>
-            <p>Choose a timed archive contract with a real finish condition, or enter endless survival and chase the distance record.</p>
+            <p>Choose a story contract, endless survival, time trial or a collector photography challenge.</p>
           </div>
           <div class="route-preview" id="routePreview" data-map="city">
             <div class="route-preview-shade" aria-hidden="true"></div>
@@ -144,6 +147,8 @@
           <div class="drive-mode-selector" aria-label="Driving mode">
             <button class="selected" type="button" data-mode="contract" aria-pressed="true"><small>01 / CAMPAIGN</small><b>ARCHIVE CONTRACT</b><span>Finish the route, recover all four pages and beat the clock.</span></button>
             <button type="button" data-mode="endless" aria-pressed="false"><small>02 / SURVIVAL</small><b>ENDLESS RUN</b><span>One collision ends the run. Traffic intensifies without limit.</span></button>
+            <button type="button" data-mode="time_trial" aria-pressed="false"><small>03 / PRECISION</small><b>TIME TRIAL</b><span>No collection detours. Reach the finish and set the fastest clean time.</span></button>
+            <button type="button" data-mode="collector" aria-pressed="false"><small>04 / DISCOVERY</small><b>COLLECTOR CHALLENGE</b><span>Photograph three archive cars in live traffic, then secure the route.</span></button>
             <div class="token-bank"><small>ARCHIVE TOKENS</small><b id="archiveTokenCount">00</b><span>First clear reward</span></div>
           </div>
           <div class="selection-actions"><button class="back-button" type="button" data-screen-target="vehicle">← BACK</button><button class="primary-button compact" id="raceButton" type="button"><span>START CONTRACT</span><i>↗</i></button></div>
@@ -164,6 +169,7 @@
             <div class="telemetry-speed"><small>SPEED</small><strong id="telemetrySpeed">000</strong><em>KM/H</em></div>
             <div><small>DISTANCE</small><strong id="telemetryDistance">0.00</strong><em>KM</em></div>
           </div>
+          <div class="world-event" id="worldEvent"><small>LIVE ROUTE</small><b id="worldEventLabel">CLEAR ROAD</b><span id="weatherBadge">AUTO WEATHER</span></div>
           <div class="speed-cluster"><small class="speed-caption">VELOCITY</small><b id="speedLabel">000</b><span>KM/H</span><div class="speed-bar"><i id="speedBar"></i></div><small id="gearLabel">N</small></div>
           <div class="drive-score"><small>SCORE <i id="difficultyLabel">LEVEL 1</i></small><b id="scoreLabel">000000</b><em id="comboLabel">×1.0</em><div class="clean-progress"><span>CLEAN RUN</span><i><b id="difficultyProgress"></b></i></div></div>
           <div class="boost-cluster"><small>BOOST</small><div><i id="boostBar"></i></div><b id="boostLabel">100</b></div>
@@ -174,14 +180,14 @@
           <div class="toast" id="collectToast"><span>+1</span> LOST SKETCH RECOVERED</div>
           <div class="touch-controls" aria-label="Touch driving controls">
             <div><button data-control="left" aria-label="Steer left">←</button><button data-control="right" aria-label="Steer right">→</button></div>
-            <div><button data-control="brake" aria-label="Brake">BRAKE</button><button class="boost" data-control="boost" aria-label="Boost">BOOST</button><button class="gas" data-control="gas" aria-label="Throttle">GAS</button></div>
+            <div><button data-control="brake" aria-label="Brake">BRAKE</button><button class="photo" data-action="photo" aria-label="Take collector photo">PHOTO</button><button class="boost" data-control="boost" aria-label="Boost">BOOST</button><button class="gas" data-control="gas" aria-label="Throttle">GAS</button></div>
           </div>
-          <div class="pause-panel" id="pausePanel"><p class="kicker">SYSTEM HOLD / Ⅱ</p><h2>THE ROAD<br />IS WAITING.</h2><p class="pause-note">DRIVING FLOW PAUSED</p><button class="primary-button compact" id="resumeButton" type="button"><span>RESUME</span><i>→</i></button><button class="ghost-button light" id="quitButton" type="button">RETURN TO ROUTES</button></div>
+          <div class="pause-panel" id="pausePanel"><p class="kicker">SYSTEM HOLD / Ⅱ</p><h2>THE ROAD<br />IS WAITING.</h2><p class="pause-note">DRIVING FLOW PAUSED</p><button class="primary-button compact" id="resumeButton" type="button"><span>RESUME</span><i>→</i></button><button class="ghost-button light" id="pauseSettingsButton" type="button">DISPLAY & CONTROLS</button><button class="ghost-button light" id="quitButton" type="button">RETURN TO ROUTES</button></div>
         </section>
 
         <section class="screen result-screen" id="resultScreen" aria-labelledby="resultTitle">
           <div class="result-art"><img id="resultImage" src="./cars/silverado-front.jpg" alt="Collector image of the completed vehicle" /><div class="result-grade" id="resultGrade">A</div></div>
-          <div class="result-copy"><p class="kicker" id="resultKicker">ROUTE COMPLETE</p><h2 id="resultTitle">A NEW STORY<br />FOR THE ARCHIVE.</h2><div class="result-stats"><div><small>TIME</small><b id="resultTime">00:00.0</b></div><div><small>DISTANCE</small><b id="resultDistance">0.0 KM</b></div><div><small>TOP SPEED</small><b id="resultSpeed">210 KM/H</b></div><div><small>TOTAL SCORE</small><b id="resultScore">000000</b></div></div><p id="resultMessage">All lost sketches recovered. This route has been added to the collection.</p><div class="result-actions"><button class="primary-button" id="replayButton" type="button"><span>DRIVE AGAIN</span><i>↻</i></button><button class="ghost-button light" id="newRouteButton" type="button">NEW ROUTE</button></div></div>
+          <div class="result-copy"><p class="kicker" id="resultKicker">ROUTE COMPLETE</p><h2 id="resultTitle">A NEW STORY<br />FOR THE ARCHIVE.</h2><div class="result-stats"><div><small>TIME</small><b id="resultTime">00:00.0</b></div><div><small>DISTANCE</small><b id="resultDistance">0.0 KM</b></div><div><small>TOP SPEED</small><b id="resultSpeed">210 KM/H</b></div><div><small>TOTAL SCORE</small><b id="resultScore">000000</b></div></div><div class="result-rewards"><span><small>MEDAL</small><b id="resultMedal">GOLD</b></span><span><small>ARCHIVE XP</small><b id="resultXp">+000</b></span><span><small>STARS</small><b id="resultStars">★★★</b></span></div><p id="resultMessage">All lost sketches recovered. This route has been added to the collection.</p><div class="result-actions"><button class="primary-button" id="replayButton" type="button"><span>DRIVE AGAIN</span><i>↻</i></button><button class="ghost-button light" id="newRouteButton" type="button">NEW ROUTE</button><button class="ghost-button light" id="resultArchiveButton" type="button">VIEW ARCHIVE</button></div></div>
         </section>
       </main>
 
@@ -189,8 +195,28 @@
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="howTitle">
           <button class="modal-close" id="howClose" type="button" aria-label="Close">×</button>
           <p class="kicker">DRIVER PROTOCOL / 04</p><h2 id="howTitle">BEFORE YOU<br />HIT THE ROAD</h2>
-          <ol><li><b>01</b><span>Inspect your car in the 360° showroom, choose a route, then select Archive Contract or Endless Run.</span></li><li><b>02</b><span>Change lanes, use SHIFT for boost, C for chase cameras and V for the interactive 360° driving view.</span></li><li><b>03</b><span>In Archive Contract, recover all four pages and reach the finish before time expires. A first clear earns an Archive Token.</span></li><li><b>04</b><span>In Endless Run, one collision ends the run while traffic and difficulty continue to increase.</span></li></ol>
+          <ol><li><b>01</b><span>Inspect your car in the 360° showroom, choose a route, then select one of four driving modes.</span></li><li><b>02</b><span>Change lanes, use SHIFT for boost, C for chase cameras, V for the 360° view and P to photograph archive traffic.</span></li><li><b>03</b><span>Recover pages to unlock vehicle stories, sketches and owner information inside My Archive.</span></li><li><b>04</b><span>Near misses, clean overtakes and high-speed sections build the multiplier. One collision ends the run.</span></li><li><b>05</b><span>Weather, road works, police checks and visibility events change during every route.</span></li><li><b>06</b><span>Earn medals, stars, Archive XP and tokens. Progress is saved automatically on this console.</span></li></ol>
           <button class="primary-button full" id="howStart" type="button"><span>CHOOSE DRIVER</span><i>→</i></button>
+        </div>
+      </div>
+      <div class="modal archive-modal" id="archiveModal" aria-hidden="true">
+        <div class="modal-card archive-card" role="dialog" aria-modal="true" aria-labelledby="archiveTitle">
+          <button class="modal-close" id="archiveClose" type="button" aria-label="Close">×</button>
+          <p class="kicker">PERSONAL COLLECTION / 45</p><h2 id="archiveTitle">MY LIVING<br />ARCHIVE</h2>
+          <div class="archive-summary"><span><small>DRIVER LEVEL</small><b id="archiveLevel">01</b></span><span><small>ARCHIVE XP</small><b id="archiveXp">0000</b></span><span><small>STARS</small><b id="archiveStars">00</b></span><span><small>PAGES</small><b id="archivePages">00 / 12</b></span></div>
+          <div class="story-grid" id="archiveStoryGrid"></div>
+          <div class="archive-page-grid" id="archivePageGrid"></div>
+        </div>
+      </div>
+      <div class="modal settings-modal" id="settingsModal" aria-hidden="true">
+        <div class="modal-card settings-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+          <button class="modal-close" id="settingsClose" type="button" aria-label="Close">×</button>
+          <p class="kicker">CONSOLE SYSTEM / DISPLAY</p><h2 id="settingsTitle">DRIVER<br />SETTINGS</h2>
+          <div class="settings-row"><span><b>GRAPHICS QUALITY</b><small>Resolution, shadows and world detail</small></span><div class="segmented" id="qualityOptions"><button data-quality="performance">PERFORMANCE</button><button data-quality="high">HIGH</button><button data-quality="ultra">ULTRA</button></div></div>
+          <div class="settings-row"><span><b>DYNAMIC WEATHER</b><small>Rain, fog and dust route events</small></span><button class="toggle-setting" id="weatherToggle" type="button">ON</button></div>
+          <div class="settings-row"><span><b>CAMERA RESPONSE</b><small>Impact shake and off-road movement</small></span><button class="toggle-setting" id="shakeToggle" type="button">ON</button></div>
+          <div class="settings-row"><span><b>GAMEPAD HAPTICS</b><small>Collision, boost and archive feedback</small></span><button class="toggle-setting" id="hapticsToggle" type="button">ON</button></div>
+          <button class="primary-button full" id="fullscreenButton" type="button"><span>ENTER FULLSCREEN</span><i>□</i></button>
         </div>
       </div>
     </div>
@@ -202,6 +228,6 @@
         }
       }
     </script>
-  <script type="module" src="./game3d.js?v=ultra-graphics-45"></script>
+  <script type="module" src="./game3d.js?v=living-archive-46"></script>
   </body>
 </html>

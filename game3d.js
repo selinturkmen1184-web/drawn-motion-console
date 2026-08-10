@@ -136,6 +136,55 @@ const mapPresentation = {
   forest: { kicker: "DAWN / MOUNTAIN", difficulty: "EXPERT" },
 };
 
+const modeDefinitions = {
+  contract: { label: "CONTRACT", button: "START CONTRACT", timed: true, pages: true },
+  endless: { label: "ENDLESS", button: "START SURVIVAL", timed: false, pages: true },
+  time_trial: { label: "TIME TRIAL", button: "START TIME TRIAL", timed: true, pages: false },
+  collector: { label: "COLLECTOR", button: "START CHALLENGE", timed: true, pages: false },
+};
+
+const archiveStories = {
+  silverado: "A purpose-built overland truck whose hand-finished accessories turn utility into a personal expedition signature.",
+  clk55: "A bronze grand tourer that combines open-air performance, restrained elegance and the unmistakable character of the V8 era.",
+};
+
+function readStoredJson(key, fallback) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "null");
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+const driverProfile = Object.assign({
+  xp: 0,
+  stars: 0,
+  tokens: Number(localStorage.getItem("tdm-archive-tokens") || 0),
+  pages: [],
+  photos: [],
+  vehicles: [],
+  medals: {},
+  totalDistance: 0,
+  totalNearMisses: 0,
+}, readStoredJson("tdm-driver-profile-v46", {}));
+
+const consoleSettings = Object.assign({
+  quality: "ultra",
+  weather: true,
+  shake: true,
+  haptics: true,
+}, readStoredJson("tdm-console-settings-v46", {}));
+
+function saveDriverProfile() {
+  localStorage.setItem("tdm-driver-profile-v46", JSON.stringify(driverProfile));
+  localStorage.setItem("tdm-archive-tokens", String(driverProfile.tokens || 0));
+}
+
+function saveConsoleSettings() {
+  localStorage.setItem("tdm-console-settings-v46", JSON.stringify(consoleSettings));
+}
+
 const app = document.getElementById("app");
 const screens = {
   home: document.getElementById("homeScreen"),
@@ -170,6 +219,13 @@ const archiveTokenCount = document.getElementById("archiveTokenCount");
 const raceButtonLabel = document.querySelector("#raceButton span");
 const brandIntro = document.getElementById("brandIntro");
 const introSkip = document.getElementById("introSkip");
+const archiveModal = document.getElementById("archiveModal");
+const settingsModal = document.getElementById("settingsModal");
+const archiveStoryGrid = document.getElementById("archiveStoryGrid");
+const archivePageGrid = document.getElementById("archivePageGrid");
+const worldEventPanel = document.getElementById("worldEvent");
+const worldEventLabel = document.getElementById("worldEventLabel");
+const weatherBadge = document.getElementById("weatherBadge");
 
 const hud = {
   vehicleImage: document.getElementById("hudVehicleImage"),
@@ -210,15 +266,16 @@ const radarMarkers = Array.from({ length: 10 }, function () {
 
 const state = {
   screen: "home",
-  vehicle: "silverado",
-  map: "city",
-  mode: "contract",
+  vehicle: vehicles[localStorage.getItem("tdm-last-vehicle")] ? localStorage.getItem("tdm-last-vehicle") : "silverado",
+  map: maps[localStorage.getItem("tdm-last-map")] ? localStorage.getItem("tdm-last-map") : "city",
+  mode: modeDefinitions[localStorage.getItem("tdm-last-mode")] ? localStorage.getItem("tdm-last-mode") : "contract",
   sound: true,
   keys: { left: false, right: false, gas: false, brake: false, boost: false },
   race: null,
   raf: 0,
   gamepadPauseHeld: false,
   gamepadOrbitHeld: false,
+  gamepadPhotoHeld: false,
 };
 
 const showroom = {
@@ -241,6 +298,7 @@ let engineBassOscillator = null;
 let engineBassGain = null;
 let windSource = null;
 let windGain = null;
+let tireGain = null;
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -325,7 +383,8 @@ const trafficWorld = new THREE.Group();
 const collectibleWorld = new THREE.Group();
 const atmosphereWorld = new THREE.Group();
 const skyWorld = new THREE.Group();
-world.add(skyWorld, roadWorld, trafficWorld, collectibleWorld, atmosphereWorld);
+const eventWorld = new THREE.Group();
+world.add(skyWorld, roadWorld, trafficWorld, collectibleWorld, eventWorld, atmosphereWorld);
 scene.add(world);
 
 const SEGMENT_LENGTH = 42;
@@ -544,13 +603,20 @@ function initAudio() {
   windSource = audioContext.createBufferSource();
   windGain = audioContext.createGain();
   const windFilter = audioContext.createBiquadFilter();
+  const tireFilter = audioContext.createBiquadFilter();
+  tireGain = audioContext.createGain();
   windSource.buffer = noiseBuffer;
   windSource.loop = true;
   windFilter.type = "bandpass";
   windFilter.frequency.value = 980;
   windFilter.Q.value = 0.55;
   windGain.gain.value = 0;
+  tireFilter.type = "bandpass";
+  tireFilter.frequency.value = 310;
+  tireFilter.Q.value = 0.78;
+  tireGain.gain.value = 0;
   windSource.connect(windFilter).connect(windGain).connect(audioContext.destination);
+  windSource.connect(tireFilter).connect(tireGain).connect(audioContext.destination);
   windSource.start();
 }
 
@@ -565,6 +631,12 @@ function updateAudio(speed, maxSpeed, active, boosting) {
     engineBassGain.gain.setTargetAtTime(state.sound && active ? 0.018 + ratio * 0.018 : 0, now, 0.1);
   }
   if (windGain) windGain.gain.setTargetAtTime(state.sound && active ? Math.max(0, ratio - 0.28) * 0.025 : 0, now, 0.14);
+  if (tireGain) {
+    const tireActivity = state.race && active
+      ? (state.race.offRoad ? 0.026 : 0) + (state.keys.brake && ratio > 0.28 ? 0.018 * ratio : 0)
+      : 0;
+    tireGain.gain.setTargetAtTime(state.sound ? tireActivity : 0, now, 0.08);
+  }
 }
 
 function playTone(frequency, duration, type, volume) {
@@ -591,36 +663,40 @@ function formatTime(seconds) {
 }
 
 function getRouteMeta(id) {
-  if (state.mode === "contract") return "ARCHIVE CONTRACT · " + maps[id].timeLimit + " SEC · 4 PAGES";
-  return "ENDLESS SURVIVAL · " + mapPresentation[id].difficulty + " · 4 PAGES";
+  const map = maps[id];
+  if (state.mode === "contract") return "ARCHIVE CONTRACT · " + map.timeLimit + " SEC · 4 PAGES";
+  if (state.mode === "time_trial") return "TIME TRIAL · " + Math.max(48, map.timeLimit - 8) + " SEC · CLEAN FINISH";
+  if (state.mode === "collector") return "COLLECTOR CHALLENGE · " + (map.timeLimit + 18) + " SEC · 3 PHOTOS";
+  return "ENDLESS SURVIVAL · " + mapPresentation[id].difficulty + " · LIVING TRAFFIC";
 }
 
 function updateBestLabels() {
   document.querySelectorAll("[data-best]").forEach(function (element) {
-    if (state.mode === "contract") {
-      const value = Number(localStorage.getItem("tdm-contract-best-" + element.dataset.best));
+    if (state.mode === "contract" || state.mode === "time_trial" || state.mode === "collector") {
+      const value = Number(localStorage.getItem("tdm-" + state.mode + "-best-" + element.dataset.best));
       element.textContent = value ? "BEST " + formatTime(value) : "BEST —";
     } else {
       const value = Number(localStorage.getItem("tdm-survival-best-" + element.dataset.best));
       element.textContent = value ? "BEST " + (value / 1000).toFixed(1) + " KM" : "BEST — KM";
     }
   });
-  archiveTokenCount.textContent = Number(localStorage.getItem("tdm-archive-tokens") || 0).toString().padStart(2, "0");
+  archiveTokenCount.textContent = Number(driverProfile.tokens || 0).toString().padStart(2, "0");
 }
 
 function selectMode(mode) {
-  if (mode !== "contract" && mode !== "endless") return;
+  if (!modeDefinitions[mode]) return;
   state.mode = mode;
+  localStorage.setItem("tdm-last-mode", mode);
   modeButtons.forEach(function (button) {
     const selected = button.dataset.mode === mode;
     button.classList.toggle("selected", selected);
     button.setAttribute("aria-pressed", selected ? "true" : "false");
   });
   document.querySelectorAll(".map-mode-label").forEach(function (label) {
-    label.textContent = mode === "contract" ? "CONTRACT" : "ENDLESS";
+    label.textContent = modeDefinitions[mode].label;
   });
   routePreviewMeta.textContent = getRouteMeta(state.map);
-  raceButtonLabel.textContent = mode === "contract" ? "START CONTRACT" : "START SURVIVAL";
+  raceButtonLabel.textContent = modeDefinitions[mode].button;
   updateBestLabels();
 }
 
@@ -628,6 +704,7 @@ function chooseVehicle(id) {
   const vehicle = vehicles[id];
   if (!vehicle) return;
   state.vehicle = id;
+  localStorage.setItem("tdm-last-vehicle", id);
   document.querySelectorAll(".vehicle-select-card").forEach(function (card) {
     const selected = card.dataset.vehicle === id;
     card.classList.toggle("selected", selected);
@@ -645,6 +722,7 @@ function chooseVehicle(id) {
 function chooseMap(id) {
   if (!maps[id]) return;
   state.map = id;
+  localStorage.setItem("tdm-last-map", id);
   document.querySelectorAll(".map-card").forEach(function (card) {
     card.classList.toggle("selected", card.dataset.map === id);
   });
@@ -675,6 +753,103 @@ function buildArchiveRail() {
     fragment.appendChild(button);
   });
   archiveRail.appendChild(fragment);
+}
+
+function renderLivingArchive() {
+  const level = 1 + Math.floor((driverProfile.xp || 0) / 2500);
+  document.getElementById("archiveLevel").textContent = String(level).padStart(2, "0");
+  document.getElementById("archiveXp").textContent = Math.round(driverProfile.xp || 0).toString().padStart(4, "0");
+  document.getElementById("archiveStars").textContent = Math.round(driverProfile.stars || 0).toString().padStart(2, "0");
+  document.getElementById("archivePages").textContent = (driverProfile.pages || []).length.toString().padStart(2, "0") + " / 12";
+  archiveStoryGrid.innerHTML = Object.values(vehicles).map(function (vehicle) {
+    const unlocked = (driverProfile.vehicles || []).includes(vehicle.id);
+    return '<article class="story-card' + (unlocked ? "" : " locked") + '"><img src="' + vehicle.resultImage + '" alt="" /><small>'
+      + vehicle.archiveLabel + '</small><h3>' + (unlocked ? vehicle.name : "STORY LOCKED") + '</h3><p>'
+      + (unlocked ? archiveStories[vehicle.id] + " · OWNER " + vehicle.ownerInstagram : "Recover a lost page while driving this vehicle to unlock its archive story.") + '</p></article>';
+  }).join("");
+  archivePageGrid.innerHTML = Object.values(maps).flatMap(function (map) {
+    return map.pages.map(function (_, index) {
+      const key = map.id + "-" + index;
+      const unlocked = (driverProfile.pages || []).includes(key);
+      return '<article class="archive-page' + (unlocked ? "" : " locked") + '"><b>'
+        + (unlocked ? "PAGE " + String(index + 1).padStart(2, "0") : "LOCKED") + '</b><small>' + map.name + '</small></article>';
+    });
+  }).join("");
+}
+
+function setModal(modal, open) {
+  modal.classList.toggle("show", open);
+  modal.setAttribute("aria-hidden", open ? "false" : "true");
+}
+
+function openArchive() {
+  renderLivingArchive();
+  setModal(archiveModal, true);
+}
+
+function closeArchive() {
+  setModal(archiveModal, false);
+}
+
+function syncSettingsUi() {
+  document.querySelectorAll("[data-quality]").forEach(function (button) {
+    button.classList.toggle("selected", button.dataset.quality === consoleSettings.quality);
+  });
+  [
+    ["weatherToggle", "weather"],
+    ["shakeToggle", "shake"],
+    ["hapticsToggle", "haptics"],
+  ].forEach(function (entry) {
+    const button = document.getElementById(entry[0]);
+    const enabled = Boolean(consoleSettings[entry[1]]);
+    button.textContent = enabled ? "ON" : "OFF";
+    button.classList.toggle("selected", enabled);
+  });
+}
+
+function applyGraphicsQuality() {
+  const qualities = {
+    performance: { dpr: 1.2, showroomDpr: 1.2, shadow: 1024 },
+    high: { dpr: 1.8, showroomDpr: 1.65, shadow: 2048 },
+    ultra: { dpr: 2.5, showroomDpr: 2.25, shadow: 4096 },
+  };
+  const quality = qualities[consoleSettings.quality] || qualities.ultra;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.dpr));
+  showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.showroomDpr));
+  sun.shadow.mapSize.set(quality.shadow, quality.shadow);
+  showroomKey.shadow.mapSize.set(Math.min(2048, quality.shadow), Math.min(2048, quality.shadow));
+  if (sun.shadow.map) {
+    sun.shadow.map.dispose();
+    sun.shadow.map = null;
+  }
+  if (showroomKey.shadow.map) {
+    showroomKey.shadow.map.dispose();
+    showroomKey.shadow.map = null;
+  }
+  document.body.dataset.quality = consoleSettings.quality;
+  resizeRenderer();
+  resizeShowroom();
+}
+
+function openSettings() {
+  syncSettingsUi();
+  setModal(settingsModal, true);
+}
+
+function closeSettings() {
+  setModal(settingsModal, false);
+}
+
+function pulseGamepad(duration, strongMagnitude, weakMagnitude) {
+  if (!consoleSettings.haptics || !navigator.getGamepads) return;
+  const pad = Array.from(navigator.getGamepads()).filter(Boolean)[0];
+  const actuator = pad && (pad.vibrationActuator || (pad.hapticActuators && pad.hapticActuators[0]));
+  if (!actuator || !actuator.playEffect) return;
+  actuator.playEffect("dual-rumble", {
+    duration: duration || 90,
+    strongMagnitude: strongMagnitude === undefined ? 0.45 : strongMagnitude,
+    weakMagnitude: weakMagnitude === undefined ? 0.3 : weakMagnitude,
+  }).catch(function () {});
 }
 
 let introDismissed = false;
@@ -728,6 +903,42 @@ document.getElementById("howStart").addEventListener("click", function () {
 howModal.addEventListener("click", function (event) {
   if (event.target === howModal) closeHow();
 });
+document.getElementById("archiveButton").addEventListener("click", openArchive);
+document.getElementById("resultArchiveButton").addEventListener("click", openArchive);
+document.getElementById("archiveClose").addEventListener("click", closeArchive);
+archiveModal.addEventListener("click", function (event) {
+  if (event.target === archiveModal) closeArchive();
+});
+document.getElementById("settingsButton").addEventListener("click", openSettings);
+document.getElementById("pauseSettingsButton").addEventListener("click", openSettings);
+document.getElementById("settingsClose").addEventListener("click", closeSettings);
+settingsModal.addEventListener("click", function (event) {
+  if (event.target === settingsModal) closeSettings();
+});
+document.querySelectorAll("[data-quality]").forEach(function (button) {
+  button.addEventListener("click", function () {
+    consoleSettings.quality = button.dataset.quality;
+    saveConsoleSettings();
+    syncSettingsUi();
+    applyGraphicsQuality();
+  });
+});
+[
+  ["weatherToggle", "weather"],
+  ["shakeToggle", "shake"],
+  ["hapticsToggle", "haptics"],
+].forEach(function (entry) {
+  document.getElementById(entry[0]).addEventListener("click", function () {
+    consoleSettings[entry[1]] = !consoleSettings[entry[1]];
+    saveConsoleSettings();
+    syncSettingsUi();
+    if (entry[1] === "weather" && state.race && !consoleSettings.weather) setRaceWeather(state.race, "clear", "CLEAR ROAD");
+  });
+});
+document.getElementById("fullscreenButton").addEventListener("click", function () {
+  if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+  else document.documentElement.requestFullscreen().catch(function () {});
+});
 
 document.getElementById("soundButton").addEventListener("click", function (event) {
   state.sound = !state.sound;
@@ -737,6 +948,7 @@ document.getElementById("soundButton").addEventListener("click", function (event
     engineGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
     if (engineBassGain) engineBassGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
     if (windGain) windGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
+    if (tireGain) tireGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
   }
 });
 
@@ -766,7 +978,12 @@ window.addEventListener("keydown", function (event) {
     state.keys[keyMap[event.key]] = true;
     if (state.screen === "game") event.preventDefault();
   }
-  if (event.key === "Escape" && state.screen === "game") togglePause();
+  if (event.key === "Escape") {
+    if (settingsModal.classList.contains("show")) closeSettings();
+    else if (archiveModal.classList.contains("show")) closeArchive();
+    else if (howModal.classList.contains("show")) closeHow();
+    else if (state.screen === "game") togglePause();
+  }
   if ((event.key === "c" || event.key === "C") && state.screen === "game") {
     event.preventDefault();
     cycleCameraMode();
@@ -774,6 +991,10 @@ window.addEventListener("keydown", function (event) {
   if ((event.key === "v" || event.key === "V") && state.screen === "game") {
     event.preventDefault();
     toggleOrbitCamera();
+  }
+  if ((event.key === "p" || event.key === "P") && state.screen === "game") {
+    event.preventDefault();
+    takeCollectorPhoto();
   }
 });
 window.addEventListener("keyup", function (event) {
@@ -795,6 +1016,9 @@ document.querySelectorAll("[data-control]").forEach(function (button) {
     button.addEventListener(name, function () { set(false); });
   });
 });
+document.querySelectorAll('[data-action="photo"]').forEach(function (button) {
+  button.addEventListener("click", takeCollectorPhoto);
+});
 
 function readControls() {
   let steer = (state.keys.right ? 1 : 0) - (state.keys.left ? 1 : 0);
@@ -815,6 +1039,9 @@ function readControls() {
     const orbitPressed = Boolean(pad.buttons[3] && pad.buttons[3].pressed);
     if (orbitPressed && !state.gamepadOrbitHeld && state.screen === "game") toggleOrbitCamera();
     state.gamepadOrbitHeld = orbitPressed;
+    const photoPressed = Boolean(pad.buttons[2] && pad.buttons[2].pressed);
+    if (photoPressed && !state.gamepadPhotoHeld && state.screen === "game") takeCollectorPhoto();
+    state.gamepadPhotoHeld = photoPressed;
   }
   return { steer, gas, brake, boost };
 }
@@ -1200,6 +1427,7 @@ function createWheel(radius, width) {
   );
   wheel.add(rim);
   wheel.rotation.z = Math.PI / 2;
+  wheel.userData.isWheelSpin = true;
   wheel.castShadow = true;
   return wheel;
 }
@@ -1472,7 +1700,8 @@ function resizeShowroom() {
   const rect = showroomCanvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
-  showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.25));
+  const dprCap = consoleSettings.quality === "performance" ? 1.2 : consoleSettings.quality === "high" ? 1.65 : 2.25;
+  showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap));
   showroomRenderer.setSize(width, height, false);
   showroomCamera.aspect = width / height;
   showroomCamera.updateProjectionMatrix();
@@ -1493,6 +1722,7 @@ async function loadShowroomVehicle(id) {
     const gltf = await warmVehicleModel(vehicle);
     if (token !== showroom.loadToken) return;
     const model = addVehicleAccessories(normalizeImportedCar(gltf.scene, vehicle), vehicle);
+    model.traverse(function (child) { if (child.userData.isWheelRig) child.visible = false; });
     model.add(createContactShadow(vehicle));
     if (showroom.model) showroomScene.remove(showroom.model);
     showroom.model = model;
@@ -1526,7 +1756,10 @@ function renderShowroom(timeMs) {
   if (state.screen === "vehicle") {
     if (showroom.autoRotate && !showroom.dragging) showroom.targetYaw += dt * 0.36;
     showroom.yaw = THREE.MathUtils.lerp(showroom.yaw, showroom.targetYaw, 1 - Math.pow(0.0008, dt));
-    if (showroom.model) showroom.model.rotation.y = showroom.yaw;
+    if (showroom.model) {
+      showroom.model.rotation.y = showroom.yaw;
+      animateVehicleWheels(showroom.model, dt * 0.72, 0.05);
+    }
     showroomRenderer.render(showroomScene, showroomCamera);
   }
   showroom.raf = requestAnimationFrame(renderShowroom);
@@ -1761,11 +1994,61 @@ function addClkAccessories(group, vehicle) {
   });
 }
 
+function installAnimatedWheelRig(group, vehicle) {
+  if (group.userData.hasAnimatedWheelRig) return group;
+  const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x080a0c, roughness: 0.86, metalness: 0.06 });
+  const rimMaterial = new THREE.MeshPhysicalMaterial({ color: vehicle.truck ? 0x343b42 : 0xb8b9b5, roughness: 0.2, metalness: 0.88, clearcoat: 0.42 });
+  [-1, 1].forEach(function (side) {
+    [-vehicle.wheelBase, vehicle.wheelBase].forEach(function (z) {
+      const steeringPivot = new THREE.Group();
+      steeringPivot.position.set(side * vehicle.targetWidth * (vehicle.truck ? 0.405 : 0.425), vehicle.wheelRadius * 0.92, z);
+      steeringPivot.userData.isWheelRig = true;
+      steeringPivot.userData.isSteeringWheel = z < 0;
+      const spin = new THREE.Group();
+      spin.userData.isWheelSpin = true;
+      const radius = vehicle.wheelRadius * 0.84;
+      const tire = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 0.22, 28), tireMaterial);
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.58, radius * 0.58, 0.235, 14), rimMaterial);
+      tire.rotation.z = Math.PI / 2;
+      rim.rotation.z = Math.PI / 2;
+      tire.castShadow = true;
+      rim.castShadow = true;
+      spin.add(tire, rim);
+      steeringPivot.add(spin);
+      group.add(steeringPivot);
+    });
+  });
+  group.userData.hasAnimatedWheelRig = true;
+  return group;
+}
+
+function animateVehicleWheels(root, rotationStep, steer) {
+  if (!root) return;
+  root.traverse(function (child) {
+    if (child.userData.isWheelSpin) child.rotation.x -= rotationStep;
+    if (child.userData.isSteeringWheel) child.rotation.y = THREE.MathUtils.lerp(child.rotation.y, (steer || 0) * 0.28, 0.18);
+  });
+}
+
+function tagSeparatedWheelMeshes(group) {
+  let count = 0;
+  group.traverse(function (child) {
+    if (!child.isMesh || !/(wheel|tire|tyre|rim)/i.test(child.name || "")) return;
+    child.userData.isWheelSpin = true;
+    count += 1;
+  });
+  group.userData.animatedWheelMeshCount = count;
+  return group;
+}
+
 function addVehicleAccessories(group, vehicle) {
   if (vehicle.tripoModel) {
     group.userData.isPhotoBased = false;
     group.userData.isGeneratedPbrModel = true;
-    return group;
+    // Tripo exports these two reference cars as one continuous mesh. Keep the
+    // exact silhouette intact; separated-wheel GLBs automatically use the
+    // wheel animation path without adding visible proxy geometry.
+    return tagSeparatedWheelMeshes(group);
   }
   // The single-view AI mesh is kept only as an internal scale reference. It is
   // intentionally not rendered: every visible pixel of the player car comes
@@ -1774,7 +2057,7 @@ function addVehicleAccessories(group, vehicle) {
   if (vehicle.truck) addSilveradoAccessories(group, vehicle);
   else addClkAccessories(group, vehicle);
   group.userData.isPhotoBased = false;
-  return group;
+  return installAnimatedWheelRig(group, vehicle);
 }
 
 function addPlayerLights(group, vehicle) {
@@ -2829,6 +3112,8 @@ function createTrafficVehicle(index, playerVehicleId) {
   car.userData.laneX = LANE_X[index % 3];
   car.userData.changeTimer = 1.5 + (index % 4) * 0.8;
   car.userData.cooldown = 0;
+  car.userData.photoCycle = 0;
+  car.userData.photoId = (car.userData.collectionVehicleId || "traffic") + "-" + index + "-0";
   return car;
 }
 
@@ -2969,11 +3254,183 @@ function buildCollectibles(map) {
   });
 }
 
+function setRaceWeather(race, weather, label) {
+  if (!race) return;
+  race.weather = weather;
+  screens.game.dataset.weather = weather;
+  weatherBadge.textContent = weather === "clear" ? "CLEAR" : weather.toUpperCase();
+  worldEventLabel.textContent = label || (weather === "clear" ? "CLEAR ROAD" : weather.toUpperCase() + " FRONT");
+  worldEventPanel.classList.toggle("alert", weather !== "clear");
+  worldEventPanel.classList.toggle("idle", weather === "clear" && !race.currentEvent);
+}
+
+function createEventMarkerMaterial(color, emissive) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive: emissive || color,
+    emissiveIntensity: 1.7,
+    roughness: 0.38,
+    metalness: 0.18,
+  });
+}
+
+function buildRoadEvent(race, type) {
+  eventWorld.clear();
+  const group = new THREE.Group();
+  group.position.z = -82;
+  group.userData.eventType = type;
+  group.userData.triggered = false;
+  const dark = makeMaterial(0x151c22, 0.62, 0.36);
+  const warning = createEventMarkerMaterial(0xff7a38, 0xff3217);
+  const policeBlue = createEventMarkerMaterial(0x77dfff, 0x2baaff);
+  const policeRed = createEventMarkerMaterial(0xff544d, 0xff1600);
+  if (type === "roadwork") {
+    race.closedLane = Math.floor(Math.random() * 3);
+    for (let index = 0; index < 9; index += 1) {
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.7, 12), warning);
+      cone.position.set(LANE_X[race.closedLane] + (index % 2 ? 1.25 : -1.25), 0.35, index * -5.2);
+      cone.castShadow = true;
+      group.add(cone);
+    }
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.05, 0.12), warning);
+    sign.position.set(LANE_X[race.closedLane], 1.35, 3.5);
+    group.add(sign);
+  } else if (type === "police") {
+    [-1, 1].forEach(function (side, index) {
+      const unit = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.75, 4.5), dark);
+      unit.position.set(side * 9.2, 0.55, index * -14);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.12, 0.26), index ? policeBlue : policeRed);
+      bar.position.set(side * 9.2, 1.1, index * -14);
+      group.add(unit, bar);
+    });
+  } else if (type === "tunnel") {
+    for (let index = 0; index < 8; index += 1) {
+      const z = -index * 14;
+      const top = new THREE.Mesh(new THREE.BoxGeometry(20.8, 0.75, 1.1), dark);
+      top.position.set(0, 7.2, z);
+      const left = new THREE.Mesh(new THREE.BoxGeometry(0.8, 7.5, 1.1), dark);
+      const right = left.clone();
+      left.position.set(-10, 3.55, z);
+      right.position.set(10, 3.55, z);
+      const light = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.08, 0.3), policeBlue);
+      light.position.set(0, 6.7, z);
+      group.add(top, left, right, light);
+    }
+  } else if (type === "bridge") {
+    [-1, 1].forEach(function (side) {
+      for (let index = 0; index < 5; index += 1) {
+        const tower = new THREE.Mesh(new THREE.BoxGeometry(0.85, 10.5, 1.2), dark);
+        tower.position.set(side * 10.2, 5.1, -index * 28);
+        const cable = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 28), policeBlue);
+        cable.position.set(side * 9.8, 8.8, -index * 28 - 14);
+        cable.rotation.x = side * 0.08;
+        group.add(tower, cable);
+      }
+    });
+  }
+  eventWorld.add(group);
+}
+
+function beginDynamicEvent(race) {
+  const physicalEvents = ["roadwork", "police", "tunnel", "bridge"];
+  const weatherEvent = race.map.scenery === "city" ? "rain" : race.map.scenery === "canyon" ? "dust" : "fog";
+  const pool = consoleSettings.weather ? physicalEvents.concat([weatherEvent, weatherEvent]) : physicalEvents;
+  const type = pool[Math.floor(Math.random() * pool.length)];
+  race.currentEvent = type;
+  race.eventEndDistance = race.distance + (type === "rain" || type === "dust" || type === "fog" ? 520 : 410);
+  race.nextWorldEventDistance = race.distance + 720 + Math.random() * 360;
+  const labels = {
+    rain: "RAIN SHOWER · LOW GRIP",
+    dust: "DUST FRONT · LOW VISIBILITY",
+    fog: "MOUNTAIN FOG · LOW VISIBILITY",
+    roadwork: "ROAD WORK · LANE CLOSED",
+    police: "POLICE CHECK · 110 KM/H",
+    tunnel: "TUNNEL SECTOR · LIGHTS ON",
+    bridge: "HERITAGE BRIDGE · CROSSWIND",
+  };
+  if (type === "rain" || type === "dust" || type === "fog") setRaceWeather(race, type, labels[type]);
+  else {
+    setRaceWeather(race, "clear", labels[type]);
+    worldEventPanel.classList.add("alert");
+    buildRoadEvent(race, type);
+  }
+  showToast(labels[type], type === "roadwork" || type === "police", "!");
+  pulseGamepad(120, 0.34, 0.22);
+}
+
+function updateDynamicRoute(race, travel) {
+  if (race.distance >= race.nextWorldEventDistance && !race.currentEvent) beginDynamicEvent(race);
+  eventWorld.children.forEach(function (eventGroup) {
+    eventGroup.position.z += travel;
+    const eventType = eventGroup.userData.eventType;
+    if (!eventGroup.userData.triggered && eventGroup.position.z > -18) {
+      eventGroup.userData.triggered = true;
+      if (eventType === "roadwork" && Math.abs(race.playerX - LANE_X[race.closedLane]) < 2.2) {
+        race.speed *= 0.72;
+        race.combo = 1;
+        showToast("ROAD WORK PENALTY · CHANGE LANE", true, "-");
+        pulseGamepad(170, 0.42, 0.5);
+      }
+      if (eventType === "police") {
+        if (race.speed > 110) {
+          race.score = Math.max(0, race.score - 900);
+          race.combo = 1;
+          showToast("SPEED CHECK · 900 POINT PENALTY", true, "-");
+        } else {
+          addScore(650, 0.2);
+          showToast("CLEAN SPEED CHECK · +650", false, "✓");
+        }
+      }
+    }
+    if (eventGroup.position.z > 140) eventGroup.visible = false;
+  });
+  if (race.currentEvent && race.distance >= race.eventEndDistance) {
+    race.currentEvent = null;
+    race.closedLane = -1;
+    eventWorld.clear();
+    setRaceWeather(race, "clear", "CLEAR ROAD");
+    worldEventPanel.classList.remove("alert");
+  }
+}
+
+function takeCollectorPhoto() {
+  const race = state.race;
+  if (!race || !race.active || race.paused || race.finished) return;
+  const candidates = trafficCars
+    .filter(function (car) { return car.userData.collectionVehicleId && Math.abs(car.position.z - PLAYER_Z) < 58; })
+    .sort(function (a, b) { return Math.abs(a.position.z - PLAYER_Z) - Math.abs(b.position.z - PLAYER_Z); });
+  const target = candidates[0];
+  if (!target) {
+    showToast("NO ARCHIVE CAR IN FRAME", true, "P");
+    return;
+  }
+  const photoId = target.userData.photoId;
+  if (race.photos.has(photoId)) {
+    showToast("PHOTO ALREADY ARCHIVED", true, "P");
+    return;
+  }
+  race.photos.add(photoId);
+  if (!driverProfile.photos.includes(target.userData.collectionVehicleId)) driverProfile.photos.push(target.userData.collectionVehicleId);
+  if (!driverProfile.vehicles.includes(target.userData.collectionVehicleId)) driverProfile.vehicles.push(target.userData.collectionVehicleId);
+  saveDriverProfile();
+  addScore(1250, 0.45);
+  race.visualPulse = 1;
+  screens.game.classList.remove("photo-flash");
+  void screens.game.offsetWidth;
+  screens.game.classList.add("photo-flash");
+  window.setTimeout(function () { screens.game.classList.remove("photo-flash"); }, 180);
+  playTone(880, 0.14, "square", 0.036);
+  pulseGamepad(70, 0.18, 0.52);
+  showToast("COLLECTOR PHOTO " + Math.min(3, race.photos.size) + " / 3 · +1250", false, "P");
+  updateHud();
+}
+
 function resizeRenderer() {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const dprCap = consoleSettings.quality === "performance" ? 1.2 : consoleSettings.quality === "high" ? 1.8 : 2.5;
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
   renderer.setPixelRatio(dpr);
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
@@ -2989,6 +3446,13 @@ async function startRace() {
   initAudio();
   const vehicle = vehicles[state.vehicle];
   const map = maps[state.map];
+  const timedLimit = state.mode === "contract"
+    ? map.timeLimit
+    : state.mode === "time_trial"
+      ? Math.max(48, map.timeLimit - 8)
+      : state.mode === "collector"
+        ? map.timeLimit + 18
+        : Infinity;
   state.race = {
     active: false,
     paused: false,
@@ -2997,7 +3461,7 @@ async function startRace() {
     speed: 0,
     distance: 0,
     elapsed: 0,
-    timeRemaining: state.mode === "contract" ? map.timeLimit : Infinity,
+    timeRemaining: timedLimit,
     playerX: 0,
     steer: 0,
     maxSpeed: 0,
@@ -3008,6 +3472,9 @@ async function startRace() {
     combo: 1,
     comboTimer: 0,
     nearMisses: 0,
+    overtakes: 0,
+    highSpeedTimer: 0,
+    highSpeedAwards: 0,
     lap: 1,
     nextCheckpointDistance: map.distance,
     cameraMode: 0,
@@ -3028,11 +3495,17 @@ async function startRace() {
     visualPulse: 0,
     offRoad: false,
     pages: new Set(),
+    photos: new Set(),
     firstClearReward: false,
     lastTime: performance.now(),
     vehicle,
     map,
     collisionCooldown: 0,
+    weather: "clear",
+    currentEvent: null,
+    eventEndDistance: 0,
+    nextWorldEventDistance: 520 + Math.random() * 180,
+    closedLane: -1,
   };
   hud.vehicleImage.src = vehicle.image;
   hud.vehicle.textContent = vehicle.name;
@@ -3042,16 +3515,23 @@ async function startRace() {
   hud.orbitButton.textContent = "360° VIEW";
   hud.orbitButton.classList.remove("active");
   hud.cameraButton.disabled = false;
-  hud.pages.innerHTML = Array.from({ length: 4 }, function (_, index) {
+  const objectivePips = state.mode === "collector" ? 3 : modeDefinitions[state.mode].pages ? 4 : 0;
+  hud.pages.innerHTML = Array.from({ length: objectivePips }, function (_, index) {
     return '<i class="page-pip" data-pip="' + index + '"></i>';
   }).join("");
   updateHud();
   showScreen("game");
   screens.game.dataset.route = map.id;
+  setRaceWeather(state.race, "clear", "CLEAR ROAD");
   screens.game.classList.remove("boosting", "impact", "offroad", "orbiting");
   pausePanel.classList.remove("show");
   if (currentMapTheme !== map.id) buildRoad(map);
-  buildCollectibles(map);
+  eventWorld.clear();
+  if (modeDefinitions[state.mode].pages) buildCollectibles(map);
+  else {
+    collectibleWorld.clear();
+    collectibleCards.length = 0;
+  }
 
   if (playerCar) scene.remove(playerCar);
   const playerVehiclePromise = createPlayerVehicle(vehicle);
@@ -3095,7 +3575,13 @@ function runCountdown() {
       state.race.active = true;
       state.race.lastTime = performance.now();
       showToast(
-        state.race.mode === "contract" ? "CONTRACT LIVE · RECOVER 4 PAGES" : "ENDLESS SURVIVAL · STAY CLEAN",
+        state.race.mode === "contract"
+          ? "CONTRACT LIVE · RECOVER 4 PAGES"
+          : state.race.mode === "time_trial"
+            ? "TIME TRIAL LIVE · CLEAN FINISH"
+            : state.race.mode === "collector"
+              ? "COLLECTOR LIVE · PHOTOGRAPH 3 CARS"
+              : "ENDLESS SURVIVAL · STAY CLEAN",
         false,
         "GO",
       );
@@ -3185,6 +3671,8 @@ function quitRace(target) {
   updateAudio(0, 1, false);
   screens.game.classList.remove("boosting", "impact", "offroad", "orbiting");
   pausePanel.classList.remove("show");
+  eventWorld.clear();
+  screens.game.dataset.weather = "clear";
   showScreen(target);
 }
 
@@ -3232,6 +3720,14 @@ function updateCheckpoint() {
     finishRace(race.pages.size === 4 ? "complete" : "incomplete");
     return;
   }
+  if (race.mode === "time_trial") {
+    finishRace("complete");
+    return;
+  }
+  if (race.mode === "collector") {
+    finishRace(race.photos.size >= 3 ? "complete" : "photo-incomplete");
+    return;
+  }
   race.lap += 1;
   race.nextCheckpointDistance += race.map.distance;
   race.boost = Math.min(100, race.boost + 28);
@@ -3263,6 +3759,7 @@ function triggerImpact(car) {
   screens.game.classList.add("impact");
   window.setTimeout(function () { screens.game.classList.remove("impact"); }, 180);
   if (navigator.vibrate) navigator.vibrate(90);
+  pulseGamepad(260, 1, 0.82);
   playTone(88, 0.22, "sawtooth", 0.055);
   showToast("COLLISION · RUN ENDED", true, "!");
   window.setTimeout(function () {
@@ -3282,11 +3779,14 @@ function recycleTraffic(car, index) {
   car.userData.cruiseSpeed = car.userData.speed;
   car.userData.changeTimer = (1 + Math.random() * 3.6) / (1 + (difficulty - 1) * 0.16);
   car.userData.cooldown = 0;
+  car.userData.photoCycle = (car.userData.photoCycle || 0) + 1;
+  car.userData.photoId = (car.userData.collectionVehicleId || "traffic") + "-" + index + "-" + car.userData.photoCycle;
 }
 
 function updateWorld(dt, time) {
   const race = state.race;
   const travel = race.speed * dt * WORLD_SCALE;
+  updateDynamicRoute(race, travel);
   updateAtmosphere(dt, time, travel);
   animatedLandmarkMaterials.forEach(function (material) {
     const pulse = 0.82 + Math.sin(time * 2.5 + material.userData.phase) * 0.18;
@@ -3378,6 +3878,7 @@ function updateWorld(dt, time) {
     car.userData.laneX = THREE.MathUtils.lerp(car.userData.laneX, LANE_X[car.userData.targetLane], 1 - Math.pow(laneChangeGrip, dt));
     car.position.x = car.userData.laneX;
     car.rotation.y = THREE.MathUtils.lerp(car.rotation.y, -laneTurn * 0.018, 1 - Math.pow(0.02, dt));
+    animateVehicleWheels(car, car.userData.speed * dt / 36, laneTurn * 0.08);
     const lateralDistance = Math.abs(car.position.x - race.playerX);
     if (
       race.collisionCooldown <= 0 &&
@@ -3388,10 +3889,15 @@ function updateWorld(dt, time) {
       triggerImpact(car);
     } else if (previousZ <= PLAYER_Z && car.position.z > PLAYER_Z && lateralDistance >= 2 && lateralDistance < 3.65) {
       race.nearMisses += 1;
+      race.overtakes += 1;
       race.boost = Math.min(100, race.boost + 14);
       addScore(420, 0.35);
       playTone(620 + Math.min(4, race.combo) * 80, 0.11, "square", 0.025);
+      pulseGamepad(65, 0.12, 0.42);
       showToast("NEAR MISS · BOOST +14", false, "×");
+    } else if (previousZ <= PLAYER_Z && car.position.z > PLAYER_Z && lateralDistance >= 3.65) {
+      race.overtakes += 1;
+      addScore(140, 0.04);
     }
   });
 
@@ -3424,7 +3930,10 @@ function updateRace(dt, time) {
   } else {
     race.boost = Math.min(100, race.boost + (input.gas > 0 ? 7 : 12) * dt);
   }
-  if (race.boostActive && !race.boostWasActive) playTone(210, 0.17, "sawtooth", 0.025);
+  if (race.boostActive && !race.boostWasActive) {
+    playTone(210, 0.17, "sawtooth", 0.025);
+    pulseGamepad(90, 0.22, 0.48);
+  }
   race.boostWasActive = race.boostActive;
 
   if (input.gas > 0) race.speed += vehicle.acceleration * input.gas * (1 - Math.min(0.62, initialSpeedRatio * 0.55)) * dt;
@@ -3433,8 +3942,9 @@ function updateRace(dt, time) {
 
   race.speed -= initialSpeedRatio * initialSpeedRatio * 3.2 * dt;
   const speedRatio = THREE.MathUtils.clamp(race.speed / vehicle.maxSpeed, 0, 1.2);
+  const weatherGrip = race.weather === "rain" ? 0.78 : race.weather === "dust" ? 0.88 : race.weather === "fog" ? 0.93 : 1;
   race.steer = THREE.MathUtils.lerp(race.steer, input.steer, 1 - Math.pow(0.002, dt));
-  race.playerX += input.steer * vehicle.handling * (4.25 + Math.min(1, speedRatio) * 2.2) * dt;
+  race.playerX += input.steer * vehicle.handling * weatherGrip * (4.25 + Math.min(1, speedRatio) * 2.2) * dt;
   race.playerX *= Math.pow(0.9984, dt * 60);
   race.offRoad = Math.abs(race.playerX) > 7.25;
   if (race.offRoad) race.speed -= (54 + race.speed * 0.14) * dt;
@@ -3444,7 +3954,7 @@ function updateRace(dt, time) {
   race.maxSpeed = Math.max(race.maxSpeed, race.speed);
   race.distance += race.speed * dt * 0.36;
   race.elapsed += dt;
-  if (race.mode === "contract") {
+  if (modeDefinitions[race.mode].timed) {
     race.timeRemaining = Math.max(0, race.timeRemaining - dt);
     if (race.timeRemaining <= 0) {
       finishRace("timeout");
@@ -3453,6 +3963,17 @@ function updateRace(dt, time) {
     }
   }
   race.score += race.speed * dt * 0.2 * race.combo;
+  if (race.speed > vehicle.maxSpeed * 0.82) {
+    race.highSpeedTimer += dt;
+    const earnedAwards = Math.floor(race.highSpeedTimer / 4);
+    if (earnedAwards > race.highSpeedAwards) {
+      race.highSpeedAwards = earnedAwards;
+      addScore(520, 0.2);
+      showToast("HIGH SPEED FLOW · +520", false, "↑");
+    }
+  } else {
+    race.highSpeedTimer = Math.max(0, race.highSpeedTimer - dt * 0.55);
+  }
   updateDifficulty();
   updateCheckpoint();
   if (race.finished) {
@@ -3485,6 +4006,12 @@ function updateRace(dt, time) {
       1 - Math.pow(0.001, dt),
     );
     playerCar.rotation.z = THREE.MathUtils.lerp(playerCar.rotation.z, -race.steer * speedRatio * 0.008, 1 - Math.pow(0.001, dt));
+    playerCar.rotation.x = THREE.MathUtils.lerp(
+      playerCar.rotation.x,
+      input.brake * speedRatio * 0.014 - input.gas * 0.004,
+      1 - Math.pow(0.004, dt),
+    );
+    animateVehicleWheels(playerCar, race.speed * dt / Math.max(14, vehicle.wheelRadius * 44), race.steer);
     if (playerCar.userData.playerTailLights) {
       const tailIntensity = input.brake > 0 ? 1.45 : race.boostActive ? 0.5 : 0.3;
       playerCar.userData.playerTailLights.forEach(function (light) {
@@ -3519,32 +4046,54 @@ function collectPage(index) {
   const race = state.race;
   if (race.pages.has(index)) return;
   race.pages.add(index);
+  const pageKey = race.map.id + "-" + index;
+  if (!driverProfile.pages.includes(pageKey)) driverProfile.pages.push(pageKey);
+  if (!driverProfile.vehicles.includes(race.vehicle.id)) driverProfile.vehicles.push(race.vehicle.id);
+  saveDriverProfile();
   const pip = hud.pages.querySelector('[data-pip="' + index + '"]');
   if (pip) pip.classList.add("on");
   addScore(900, 0.5);
   playTone(760 + index * 110, 0.22, "sine", 0.045);
+  pulseGamepad(105, 0.26, 0.64);
   showToast("LOST SKETCH · +" + Math.round(900 * race.combo), false, "+");
 }
 
 function updateHud() {
   const race = state.race;
   if (!race) return;
+  const timedRun = modeDefinitions[race.mode].timed;
   const lapDistance = race.distance % race.map.distance;
-  const routeDistance = race.mode === "contract" ? Math.min(race.distance, race.map.distance) : lapDistance;
+  const routeDistance = timedRun ? Math.min(race.distance, race.map.distance) : lapDistance;
   const progress = Math.min(100, routeDistance / race.map.distance * 100);
   hud.progress.style.width = progress + "%";
-  hud.map.textContent = race.map.name + (race.mode === "contract" ? " · ARCHIVE CONTRACT" : " · LAP " + race.lap);
-  hud.distance.textContent = race.mode === "contract"
+  hud.map.textContent = race.map.name + (timedRun ? " · " + modeDefinitions[race.mode].label : " · LAP " + race.lap);
+  hud.distance.textContent = timedRun
     ? (race.distance / 1000).toFixed(1) + " KM · FINISH " + Math.max(0, (race.map.distance - race.distance) / 1000).toFixed(1) + " KM"
     : (race.distance / 1000).toFixed(1) + " KM · NEXT LAP " + Math.max(0, (race.nextCheckpointDistance - race.distance) / 1000).toFixed(1) + " KM";
-  hud.time.textContent = formatTime(race.mode === "contract" ? race.timeRemaining : race.elapsed);
-  hud.time.parentElement.classList.toggle("critical", race.mode === "contract" && race.timeRemaining <= 15);
-  hud.missionKicker.textContent = race.mode === "contract" ? "ARCHIVE CONTRACT" : "SURVIVAL OBJECTIVE";
-  hud.missionObjective.textContent = race.mode === "contract" ? "RECOVER 4 PAGES · REACH FINISH" : "RECOVER LOST SKETCHES";
-  hud.missionStatus.textContent = race.mode === "contract"
-    ? "TIME " + formatTime(race.timeRemaining) + " · FINISH REQUIRED"
-    : race.nearMisses + " NEAR MISSES · LEVEL " + race.difficultyLevel;
-  hud.pageCounter.textContent = race.pages.size + " / 4";
+  hud.time.textContent = formatTime(timedRun ? race.timeRemaining : race.elapsed);
+  hud.time.parentElement.classList.toggle("critical", timedRun && race.timeRemaining <= 15);
+  if (race.mode === "contract") {
+    hud.missionKicker.textContent = "ARCHIVE CONTRACT";
+    hud.missionObjective.textContent = "RECOVER 4 PAGES · REACH FINISH";
+    hud.missionStatus.textContent = "TIME " + formatTime(race.timeRemaining) + " · FINISH REQUIRED";
+    hud.pageCounter.textContent = race.pages.size + " / 4";
+  } else if (race.mode === "time_trial") {
+    hud.missionKicker.textContent = "TIME TRIAL";
+    hud.missionObjective.textContent = "REACH FINISH · NO COLLISIONS";
+    hud.missionStatus.textContent = "TIME " + formatTime(race.timeRemaining) + " · " + race.overtakes + " OVERTAKES";
+    hud.pageCounter.textContent = "CLEAN";
+  } else if (race.mode === "collector") {
+    hud.missionKicker.textContent = "COLLECTOR CHALLENGE";
+    hud.missionObjective.textContent = "PHOTOGRAPH 3 ARCHIVE CARS";
+    hud.missionStatus.textContent = "PRESS P · TIME " + formatTime(race.timeRemaining);
+    hud.pageCounter.textContent = race.photos.size + " / 3";
+    hud.pages.querySelectorAll(".page-pip").forEach(function (pip, index) { pip.classList.toggle("on", index < race.photos.size); });
+  } else {
+    hud.missionKicker.textContent = "SURVIVAL OBJECTIVE";
+    hud.missionObjective.textContent = "STAY CLEAN · BUILD THE ARCHIVE";
+    hud.missionStatus.textContent = race.nearMisses + " NEAR MISSES · LEVEL " + race.difficultyLevel;
+    hud.pageCounter.textContent = race.pages.size + " / 4";
+  }
   hud.speed.textContent = Math.round(race.speed).toString().padStart(3, "0");
   hud.telemetrySpeed.textContent = Math.round(race.speed).toString().padStart(3, "0");
   hud.telemetryScore.textContent = Math.round(race.score).toString().padStart(6, "0");
@@ -3570,8 +4119,8 @@ function finishRace(reason) {
   const race = state.race;
   if (!race || race.finished) return;
   const crashed = reason === "crash";
-  const contract = race.mode === "contract";
   const success = reason === "complete";
+  const timedRun = modeDefinitions[race.mode].timed;
   race.finished = true;
   race.finishPending = false;
   race.active = false;
@@ -3581,61 +4130,93 @@ function finishRace(reason) {
   const pages = race.pages.size;
   let newRecord = false;
   let firstClear = false;
-  if (contract && success) {
-    const bestKey = "tdm-contract-best-" + race.map.id;
+  if (timedRun && success) {
+    const bestKey = "tdm-" + race.mode + "-best-" + race.map.id;
     const previousBest = Number(localStorage.getItem(bestKey));
     newRecord = !previousBest || race.elapsed < previousBest;
     if (newRecord) localStorage.setItem(bestKey, race.elapsed.toFixed(2));
-    const clearKey = "tdm-contract-clear-" + race.map.id;
+    const clearKey = "tdm-" + race.mode + "-clear-" + race.map.id;
     firstClear = !localStorage.getItem(clearKey);
     if (firstClear) {
       localStorage.setItem(clearKey, "1");
-      const tokens = Number(localStorage.getItem("tdm-archive-tokens") || 0) + 1;
-      localStorage.setItem("tdm-archive-tokens", String(tokens));
+      driverProfile.tokens = Number(driverProfile.tokens || 0) + 1;
       race.firstClearReward = true;
     }
-  } else if (!contract) {
+  } else if (!timedRun) {
     const bestKey = "tdm-survival-best-" + race.map.id;
     const previousBest = Number(localStorage.getItem(bestKey));
     newRecord = !previousBest || race.distance > previousBest;
     if (newRecord) localStorage.setItem(bestKey, race.distance.toFixed(1));
   }
-  const failedContract = contract && !success;
-  const grade = success ? "S" : crashed ? "X" : failedContract ? "F" : pages === 4 ? "S" : pages >= 3 ? "A" : pages >= 2 ? "B" : "C";
+  const failedTimedRun = timedRun && !success;
+  const grade = success
+    ? race.timeRemaining > 18 && race.cleanRun ? "S" : "A"
+    : crashed
+      ? "X"
+      : failedTimedRun
+        ? "F"
+        : race.nearMisses >= 8 || pages === 4 ? "A" : race.nearMisses >= 4 || pages >= 2 ? "B" : "C";
+  const starsEarned = success ? (grade === "S" ? 3 : 2) : crashed && race.distance < 300 ? 0 : 1;
+  const xpEarned = Math.max(120, Math.round(
+    (success ? 850 : 180) + race.score * 0.035 + pages * 180 + race.photos.size * 260 + race.nearMisses * 55 + race.distance * 0.035,
+  ));
+  const medal = grade === "S" ? "PLATINUM" : grade === "A" ? "GOLD" : grade === "B" ? "SILVER" : grade === "C" ? "BRONZE" : "NO MEDAL";
+  driverProfile.xp = Number(driverProfile.xp || 0) + xpEarned;
+  driverProfile.stars = Number(driverProfile.stars || 0) + starsEarned;
+  driverProfile.totalDistance = Number(driverProfile.totalDistance || 0) + race.distance;
+  driverProfile.totalNearMisses = Number(driverProfile.totalNearMisses || 0) + race.nearMisses;
+  const medalKey = race.mode + "-" + race.map.id;
+  driverProfile.medals[medalKey] = Math.max(Number(driverProfile.medals[medalKey] || 0), starsEarned);
+  saveDriverProfile();
   const resultKicker = document.getElementById("resultKicker");
   const resultTitle = document.getElementById("resultTitle");
   if (success) {
-    resultKicker.textContent = "ARCHIVE CONTRACT · COMPLETE";
+    resultKicker.textContent = modeDefinitions[race.mode].label + " · COMPLETE";
     resultTitle.innerHTML = "ROUTE SECURED.<br />ARCHIVE UPDATED.";
   } else if (reason === "timeout") {
-    resultKicker.textContent = "CONTRACT FAILED · TIME EXPIRED";
+    resultKicker.textContent = modeDefinitions[race.mode].label + " · TIME EXPIRED";
     resultTitle.innerHTML = "TIME IS OUT.<br />TRY AGAIN.";
   } else if (reason === "incomplete") {
     resultKicker.textContent = "CONTRACT FAILED · PAGES MISSING";
     resultTitle.innerHTML = "ARCHIVE<br />INCOMPLETE.";
+  } else if (reason === "photo-incomplete") {
+    resultKicker.textContent = "COLLECTOR CHALLENGE · PHOTOS MISSING";
+    resultTitle.innerHTML = "COLLECTION<br />INCOMPLETE.";
   } else {
-    resultKicker.textContent = contract ? "CONTRACT FAILED · COLLISION" : "SURVIVAL ENDED · COLLISION";
+    resultKicker.textContent = modeDefinitions[race.mode].label + " · COLLISION";
     resultTitle.innerHTML = "ONE IMPACT.<br />RUN ENDED.";
   }
   document.getElementById("resultImage").src = race.vehicle.resultImage;
   const resultGrade = document.getElementById("resultGrade");
   resultGrade.textContent = grade;
-  resultGrade.classList.toggle("crash", crashed || failedContract);
+  resultGrade.classList.toggle("crash", crashed || failedTimedRun);
   document.getElementById("resultTime").textContent = formatTime(race.elapsed);
   document.getElementById("resultDistance").textContent = (race.distance / 1000).toFixed(1) + " KM";
   document.getElementById("resultSpeed").textContent = Math.round(race.maxSpeed) + " KM/H";
   document.getElementById("resultScore").textContent = Math.round(race.score).toString().padStart(6, "0");
-  if (contract) {
+  document.getElementById("resultMedal").textContent = medal;
+  document.getElementById("resultXp").textContent = "+" + xpEarned;
+  document.getElementById("resultStars").textContent = starsEarned ? "★".repeat(starsEarned) + "☆".repeat(3 - starsEarned) : "☆☆☆";
+  if (race.mode === "contract") {
     document.getElementById("resultMessage").textContent = success
       ? (firstClear ? "ARCHIVE TOKEN EARNED · " : "CONTRACT REPLAYED · ")
         + (newRecord ? "NEW BEST TIME · " : "") + "All four lost sketches recovered and the route was secured."
       : (reason === "timeout" ? "The contract clock expired. " : reason === "incomplete" ? "The finish was reached without every page. " : "The vehicle sustained an impact. ")
         + (4 - pages) + " sketch pages remain unarchived.";
+  } else if (race.mode === "time_trial") {
+    document.getElementById("resultMessage").textContent = success
+      ? (newRecord ? "NEW ROUTE RECORD · " : "CLEAN FINISH · ") + race.overtakes + " controlled overtakes completed without contact."
+      : "The precision run ended before the finish. Build speed smoothly and protect the clean line.";
+  } else if (race.mode === "collector") {
+    document.getElementById("resultMessage").textContent = success
+      ? (firstClear ? "ARCHIVE TOKEN EARNED · " : "COLLECTION SECURED · ") + "Three moving archive cars were photographed and catalogued."
+      : race.photos.size + " of 3 collector photographs secured. Bring an archive car inside the frame and press P.";
   } else {
     document.getElementById("resultMessage").textContent = (newRecord ? "NEW DISTANCE RECORD · " : "")
       + "Lap " + race.lap + ", level " + race.difficultyLevel + " and " + (race.distance / 1000).toFixed(1)
       + " kilometres. " + (pages === 4 ? "All lost sketches recovered." : (4 - pages) + " sketch pages remain on the road.");
   }
+  pulseGamepad(success ? 220 : 130, success ? 0.55 : 0.32, success ? 0.7 : 0.38);
   updateBestLabels();
   window.setTimeout(function () { showScreen("result"); }, 500);
 }
@@ -3647,10 +4228,15 @@ function renderScene(time) {
   const speedRatio = THREE.MathUtils.clamp(race.speed / race.vehicle.maxSpeed, 0, 1.2);
   const scenery = race.map.scenery;
   const baseExposure = scenery === "city" ? 1.12 : scenery === "canyon" ? 1.06 : 1.1;
-  renderer.toneMappingExposure = baseExposure + speedRatio * 0.035 + race.visualPulse * 0.09 + Math.sin(time * 0.22) * 0.012;
+  const weatherExposure = race.weather === "clear" ? 0 : race.weather === "rain" ? -0.14 : race.weather === "dust" ? -0.08 : -0.19;
+  const daylightPulse = scenery === "city" ? 0 : Math.sin(race.elapsed * 0.018 + (scenery === "forest" ? -0.6 : 0.3)) * 0.045;
+  renderer.toneMappingExposure = baseExposure + weatherExposure + daylightPulse + speedRatio * 0.035 + race.visualPulse * 0.09 + Math.sin(time * 0.22) * 0.012;
   if (scene.fog && scene.fog.isFogExp2) {
-    scene.fog.density = race.map.fogDensity * (1 - Math.min(0.12, speedRatio * 0.09) + Math.sin(time * 0.16) * 0.015);
+    const weatherFog = race.weather === "rain" ? 1.45 : race.weather === "dust" ? 1.72 : race.weather === "fog" ? 2.05 : 1;
+    scene.fog.density = race.map.fogDensity * weatherFog * (1 - Math.min(0.12, speedRatio * 0.09) + Math.sin(time * 0.16) * 0.015);
   }
+  sun.intensity = (scenery === "city" ? 1.35 : 3.05 + daylightPulse * 7) * (race.weather === "clear" ? 1 : 0.68);
+  hemisphere.intensity = (scenery === "city" ? 2.15 : 2.25 + daylightPulse * 2.5) * (race.weather === "fog" ? 0.78 : 1);
   roadFill.intensity = (scenery === "city" ? 1.55 : 0.95) + race.visualPulse * 0.65 + Math.sin(time * 0.7) * 0.04;
   vehicleRim.intensity = (scenery === "city" ? 1.45 : 1.05) + race.visualPulse * 0.8;
   if (race.orbitCamera) {
@@ -3678,11 +4264,11 @@ function renderScene(time) {
   ];
   const view = cameraModes[race.cameraMode] || cameraModes[0];
   const targetCameraX = race.playerX * view.follow;
-  const shake = race.impactShake;
+  const shake = consoleSettings.shake ? race.impactShake : 0;
   camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCameraX, 0.075) + Math.sin(time * 71) * shake * 0.16;
   // Speed is communicated through FOV and roadside parallax; the chase camera
   // stays stable on asphalt so the vehicle silhouette remains sharp.
-  const cameraRumble = race.offRoad ? Math.sin(time * 36) * (0.012 + speedRatio * 0.012) : 0;
+  const cameraRumble = consoleSettings.shake && race.offRoad ? Math.sin(time * 36) * (0.012 + speedRatio * 0.012) : 0;
   camera.position.y = THREE.MathUtils.lerp(camera.position.y, view.y + (race.vehicle.cameraHeightBias || 0) + speedRatio * 0.24, 0.075) + cameraRumble + Math.cos(time * 63) * shake * 0.1;
   camera.position.z = THREE.MathUtils.lerp(camera.position.z, view.z + (race.vehicle.cameraDistanceBias || 0) - speedRatio * 0.58 - (race.boostActive ? 0.32 : 0), 0.075);
   const targetFov = view.fov + speedRatio * 6.5 + (race.boostActive ? 4.5 : 0);
@@ -3706,5 +4292,7 @@ function gameFrame(timeMs) {
 
 updateBestLabels();
 updateGamepadStatus(false);
-chooseVehicle("silverado");
-chooseMap("city");
+syncSettingsUi();
+applyGraphicsQuality();
+chooseVehicle(state.vehicle);
+chooseMap(state.map);
