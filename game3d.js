@@ -21,7 +21,7 @@ const vehicles = {
     wheelBase: 1.72,
     wheelRadius: 0.56,
     wheelFaceX: 1.105,
-    wheelVisualRadius: 0.47,
+    wheelVisualRadius: 0.285,
     wheelVisualY: 0.55,
     wheelVisualZ: [-1.72, 1.72],
     color: 0xe7e5db,
@@ -54,7 +54,7 @@ const vehicles = {
     wheelBase: 1.38,
     wheelRadius: 0.42,
     wheelFaceX: 0.895,
-    wheelVisualRadius: 0.355,
+    wheelVisualRadius: 0.235,
     wheelVisualY: 0.41,
     wheelVisualZ: [-1.38, 1.38],
     color: 0xa66f53,
@@ -2032,7 +2032,7 @@ function installAnimatedWheelRig(group, vehicle) {
 
 function animateVehicleWheels(root, rotationStep, steer) {
   if (!root) return;
-  const motionOpacity = THREE.MathUtils.clamp(Math.abs(rotationStep) * 7.5, 0, 0.78);
+  const motionOpacity = THREE.MathUtils.clamp(Math.abs(rotationStep) * 8.5, 0, 0.52);
   root.traverse(function (child) {
     if (child.userData.isWheelSpin) child.rotation.x -= rotationStep;
     if (child.userData.isSteeringWheel) child.rotation.y = THREE.MathUtils.lerp(child.rotation.y, (steer || 0) * 0.28, 0.18);
@@ -2048,40 +2048,29 @@ function createWheelMotionTexture(vehicle) {
   canvas.height = 256;
   const context = canvas.getContext("2d");
   const center = 128;
-  const radius = 113;
-
-  const tireShade = context.createRadialGradient(center, center, 24, center, center, radius);
-  tireShade.addColorStop(0, "rgba(10,13,16,.12)");
-  tireShade.addColorStop(0.48, vehicle.truck ? "rgba(38,44,49,.62)" : "rgba(168,171,169,.55)");
-  tireShade.addColorStop(0.73, "rgba(13,16,19,.56)");
-  tireShade.addColorStop(0.95, "rgba(3,5,7,.18)");
-  tireShade.addColorStop(1, "rgba(3,5,7,0)");
-  context.fillStyle = tireShade;
-  context.beginPath();
-  context.arc(center, center, radius, 0, Math.PI * 2);
-  context.fill();
 
   context.save();
   context.translate(center, center);
-  context.strokeStyle = vehicle.truck ? "rgba(183,193,201,.86)" : "rgba(229,224,213,.9)";
-  context.lineWidth = vehicle.truck ? 10 : 8;
+  const spokeCount = vehicle.truck ? 6 : 5;
+  context.strokeStyle = vehicle.truck ? "rgba(157,168,177,.72)" : "rgba(229,226,218,.82)";
+  context.lineWidth = vehicle.truck ? 9 : 11;
   context.lineCap = "round";
-  for (let index = 0; index < (vehicle.truck ? 8 : 10); index += 1) {
-    context.rotate((Math.PI * 2) / (vehicle.truck ? 8 : 10));
+  for (let index = 0; index < spokeCount; index += 1) {
+    context.rotate((Math.PI * 2) / spokeCount);
     context.beginPath();
-    context.moveTo(18, 0);
-    context.quadraticCurveTo(49, -8, 82, 2);
+    context.moveTo(24, 0);
+    context.quadraticCurveTo(54, -6, 88, 3);
     context.stroke();
   }
-  context.fillStyle = vehicle.truck ? "rgba(42,48,54,.96)" : "rgba(190,187,179,.96)";
+  context.strokeStyle = vehicle.truck ? "rgba(93,104,113,.5)" : "rgba(241,238,230,.62)";
+  context.lineWidth = 5;
   context.beginPath();
-  context.arc(0, 0, vehicle.truck ? 24 : 21, 0, Math.PI * 2);
-  context.fill();
-  context.strokeStyle = "rgba(242,246,247,.78)";
-  context.lineWidth = 4;
-  context.beginPath();
-  context.arc(0, 0, vehicle.truck ? 12 : 10, 0, Math.PI * 2);
+  context.arc(0, 0, 94, 0, Math.PI * 2);
   context.stroke();
+  context.fillStyle = vehicle.truck ? "rgba(54,62,69,.82)" : "rgba(198,195,188,.88)";
+  context.beginPath();
+  context.arc(0, 0, vehicle.truck ? 21 : 19, 0, Math.PI * 2);
+  context.fill();
   context.restore();
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -2099,10 +2088,9 @@ function installWheelMotionLayers(group, vehicle) {
   const centerY = vehicle.wheelVisualY || vehicle.wheelRadius;
 
   [-1, 1].forEach(function (side) {
-    wheelZ.forEach(function (z, axleIndex) {
+    wheelZ.forEach(function (z) {
       const steeringPivot = new THREE.Group();
-      steeringPivot.position.set(side * (faceX + 0.012), centerY, z);
-      steeringPivot.userData.isSteeringWheel = axleIndex === 0;
+      steeringPivot.position.set(side * (faceX + 0.006), centerY, z);
 
       const spin = new THREE.Group();
       spin.userData.isWheelSpin = true;
@@ -2117,8 +2105,8 @@ function installWheelMotionLayers(group, vehicle) {
           toneMapped: false,
           side: THREE.DoubleSide,
           polygonOffset: true,
-          polygonOffsetFactor: -2,
-          polygonOffsetUnits: -2,
+          polygonOffsetFactor: -0.5,
+          polygonOffsetUnits: -0.5,
         }),
       );
       face.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
