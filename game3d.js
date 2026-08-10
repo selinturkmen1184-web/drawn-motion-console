@@ -20,6 +20,10 @@ const vehicles = {
     targetHeight: 2.08,
     wheelBase: 1.72,
     wheelRadius: 0.56,
+    wheelFaceX: 1.105,
+    wheelVisualRadius: 0.47,
+    wheelVisualY: 0.55,
+    wheelVisualZ: [-1.72, 1.72],
     color: 0xe7e5db,
     modelRotation: 0,
     rideHeight: 0.025,
@@ -49,6 +53,10 @@ const vehicles = {
     targetHeight: 1.38,
     wheelBase: 1.38,
     wheelRadius: 0.42,
+    wheelFaceX: 0.895,
+    wheelVisualRadius: 0.355,
+    wheelVisualY: 0.41,
+    wheelVisualZ: [-1.38, 1.38],
     color: 0xa66f53,
     modelRotation: 0,
     rideHeight: 0.012,
@@ -2024,10 +2032,105 @@ function installAnimatedWheelRig(group, vehicle) {
 
 function animateVehicleWheels(root, rotationStep, steer) {
   if (!root) return;
+  const motionOpacity = THREE.MathUtils.clamp(Math.abs(rotationStep) * 7.5, 0, 0.78);
   root.traverse(function (child) {
     if (child.userData.isWheelSpin) child.rotation.x -= rotationStep;
     if (child.userData.isSteeringWheel) child.rotation.y = THREE.MathUtils.lerp(child.rotation.y, (steer || 0) * 0.28, 0.18);
+    if (child.userData.isWheelMotionLayer && child.material) {
+      child.material.opacity = THREE.MathUtils.lerp(child.material.opacity, motionOpacity, 0.22);
+    }
   });
+}
+
+function createWheelMotionTexture(vehicle) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext("2d");
+  const center = 128;
+  const radius = 113;
+
+  const tireShade = context.createRadialGradient(center, center, 24, center, center, radius);
+  tireShade.addColorStop(0, "rgba(10,13,16,.12)");
+  tireShade.addColorStop(0.48, vehicle.truck ? "rgba(38,44,49,.62)" : "rgba(168,171,169,.55)");
+  tireShade.addColorStop(0.73, "rgba(13,16,19,.56)");
+  tireShade.addColorStop(0.95, "rgba(3,5,7,.18)");
+  tireShade.addColorStop(1, "rgba(3,5,7,0)");
+  context.fillStyle = tireShade;
+  context.beginPath();
+  context.arc(center, center, radius, 0, Math.PI * 2);
+  context.fill();
+
+  context.save();
+  context.translate(center, center);
+  context.strokeStyle = vehicle.truck ? "rgba(183,193,201,.86)" : "rgba(229,224,213,.9)";
+  context.lineWidth = vehicle.truck ? 10 : 8;
+  context.lineCap = "round";
+  for (let index = 0; index < (vehicle.truck ? 8 : 10); index += 1) {
+    context.rotate((Math.PI * 2) / (vehicle.truck ? 8 : 10));
+    context.beginPath();
+    context.moveTo(18, 0);
+    context.quadraticCurveTo(49, -8, 82, 2);
+    context.stroke();
+  }
+  context.fillStyle = vehicle.truck ? "rgba(42,48,54,.96)" : "rgba(190,187,179,.96)";
+  context.beginPath();
+  context.arc(0, 0, vehicle.truck ? 24 : 21, 0, Math.PI * 2);
+  context.fill();
+  context.strokeStyle = "rgba(242,246,247,.78)";
+  context.lineWidth = 4;
+  context.beginPath();
+  context.arc(0, 0, vehicle.truck ? 12 : 10, 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+function installWheelMotionLayers(group, vehicle) {
+  if (group.userData.hasWheelMotionLayers) return group;
+  const texture = createWheelMotionTexture(vehicle);
+  const wheelZ = vehicle.wheelVisualZ || [-vehicle.wheelBase, vehicle.wheelBase];
+  const faceX = vehicle.wheelFaceX || vehicle.targetWidth * 0.5;
+  const radius = vehicle.wheelVisualRadius || vehicle.wheelRadius * 0.84;
+  const centerY = vehicle.wheelVisualY || vehicle.wheelRadius;
+
+  [-1, 1].forEach(function (side) {
+    wheelZ.forEach(function (z, axleIndex) {
+      const steeringPivot = new THREE.Group();
+      steeringPivot.position.set(side * (faceX + 0.012), centerY, z);
+      steeringPivot.userData.isSteeringWheel = axleIndex === 0;
+
+      const spin = new THREE.Group();
+      spin.userData.isWheelSpin = true;
+      const face = new THREE.Mesh(
+        new THREE.CircleGeometry(radius, 48),
+        new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          depthTest: true,
+          toneMapped: false,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
+        }),
+      );
+      face.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+      face.userData.isWheelMotionLayer = true;
+      face.renderOrder = 8;
+      spin.add(face);
+      steeringPivot.add(spin);
+      group.add(steeringPivot);
+    });
+  });
+  group.userData.hasWheelMotionLayers = true;
+  return group;
 }
 
 function tagSeparatedWheelMeshes(group) {
@@ -2045,10 +2148,12 @@ function addVehicleAccessories(group, vehicle) {
   if (vehicle.tripoModel) {
     group.userData.isPhotoBased = false;
     group.userData.isGeneratedPbrModel = true;
-    // Tripo exports these two reference cars as one continuous mesh. Keep the
-    // exact silhouette intact; separated-wheel GLBs automatically use the
-    // wheel animation path without adding visible proxy geometry.
-    return tagSeparatedWheelMeshes(group);
+    // Tripo exports these two reference cars as one continuous mesh, so their
+    // baked wheels cannot be rotated independently. Named wheel meshes remain
+    // supported for future GLBs; current cars get aligned, speed-controlled
+    // rim motion layers without replacing or distorting the original body.
+    tagSeparatedWheelMeshes(group);
+    return installWheelMotionLayers(group, vehicle);
   }
   // The single-view AI mesh is kept only as an internal scale reference. It is
   // intentionally not rendered: every visible pixel of the player car comes
