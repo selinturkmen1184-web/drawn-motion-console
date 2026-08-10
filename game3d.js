@@ -83,7 +83,7 @@ const maps = {
     pageLanes: [-1, 1, 0, -1],
     sky: 0x030914,
     fog: 0x0b1525,
-    fogDensity: 0.0055,
+    fogDensity: 0.0047,
     road: 0x151c25,
     shoulder: 0x0b121a,
     line: 0xbdefff,
@@ -101,7 +101,7 @@ const maps = {
     pageLanes: [1, -1, 0, 1],
     sky: 0xc98255,
     fog: 0x8d6750,
-    fogDensity: 0.00365,
+    fogDensity: 0.00305,
     road: 0x211c1b,
     shoulder: 0x694433,
     line: 0xffe7c0,
@@ -119,7 +119,7 @@ const maps = {
     pageLanes: [0, 1, -1, 0],
     sky: 0x8295a2,
     fog: 0x52636d,
-    fogDensity: 0.00435,
+    fogDensity: 0.00365,
     road: 0x162024,
     shoulder: 0x1f3329,
     line: 0xdcefdc,
@@ -245,9 +245,11 @@ let windGain = null;
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
+  alpha: false,
+  precision: "highp",
   powerPreference: "high-performance",
 });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -255,7 +257,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 900);
+const camera = new THREE.PerspectiveCamera(56, 1, 0.06, 1200);
 camera.position.set(0, 2.55, 10.15);
 
 const showroomRenderer = new THREE.WebGLRenderer({
@@ -264,7 +266,7 @@ const showroomRenderer = new THREE.WebGLRenderer({
   alpha: true,
   powerPreference: "high-performance",
 });
-showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.25));
 showroomRenderer.outputColorSpace = THREE.SRGBColorSpace;
 showroomRenderer.toneMapping = THREE.ACESFilmicToneMapping;
 showroomRenderer.toneMappingExposure = 1.05;
@@ -277,12 +279,20 @@ const showroomHemisphere = new THREE.HemisphereLight(0xd7f5ff, 0x111722, 2.7);
 const showroomKey = new THREE.DirectionalLight(0xffffff, 4.2);
 showroomKey.position.set(-5, 8, 6);
 showroomKey.castShadow = true;
-showroomKey.shadow.mapSize.set(1024, 1024);
+showroomKey.shadow.mapSize.set(2048, 2048);
 const showroomRim = new THREE.DirectionalLight(0x68e1ff, 3.2);
 showroomRim.position.set(7, 3, -5);
 const showroomFloor = new THREE.Mesh(
   new THREE.CircleGeometry(6.2, 64),
-  new THREE.MeshStandardMaterial({ color: 0x101820, roughness: 0.58, metalness: 0.42, transparent: true, opacity: 0.72 }),
+  new THREE.MeshPhysicalMaterial({
+    color: 0x101820,
+    roughness: 0.24,
+    metalness: 0.5,
+    clearcoat: 0.72,
+    clearcoatRoughness: 0.2,
+    transparent: true,
+    opacity: 0.78,
+  }),
 );
 showroomFloor.rotation.x = -Math.PI / 2;
 showroomFloor.position.y = -0.035;
@@ -294,13 +304,15 @@ scene.add(hemisphere);
 const sun = new THREE.DirectionalLight(0xf2f8ff, 3.05);
 sun.position.set(-12, 24, 10);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.camera.left = -24;
 sun.shadow.camera.right = 24;
 sun.shadow.camera.top = 30;
-sun.shadow.camera.bottom = -8;
+sun.shadow.camera.bottom = -10;
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 95;
 sun.shadow.bias = -0.00018;
-sun.shadow.normalBias = 0.035;
+sun.shadow.normalBias = 0.025;
 const roadFill = new THREE.DirectionalLight(0x8edcff, 1.25);
 roadFill.position.set(10, 7, 8);
 const vehicleRim = new THREE.DirectionalLight(0xffb277, 1.1);
@@ -317,7 +329,7 @@ world.add(skyWorld, roadWorld, trafficWorld, collectibleWorld, atmosphereWorld);
 scene.add(world);
 
 const SEGMENT_LENGTH = 42;
-const SEGMENT_COUNT = 20;
+const SEGMENT_COUNT = 24;
 const PLAYER_Z = 4;
 const LANE_X = [-5.1, 0, 5.1];
 const WORLD_SCALE = 0.24;
@@ -345,6 +357,8 @@ let scotsPineTexture = null;
 let redRockTexture = null;
 let asphaltTexture = null;
 let asphaltReliefTexture = null;
+let asphaltUltraTexture = null;
+let asphaltUltraReliefTexture = null;
 let canyonRockTexture = null;
 let canyonRockReliefTexture = null;
 let forestFloorTexture = null;
@@ -352,6 +366,7 @@ let forestFloorReliefTexture = null;
 let alpineGraniteTexture = null;
 let alpineGraniteReliefTexture = null;
 let softParticleTexture = null;
+let activeSkyMaterial = null;
 const sceneryMaterials = new Map();
 
 function createEvergreenCrownGeometry(seed) {
@@ -404,25 +419,46 @@ function createMountainGeometry(seed) {
 }
 
 function createMesaGeometry(seed) {
-  const profile = [
-    [0.78, -0.5], [0.96, -0.43], [1.0, -0.31], [0.84, -0.23],
-    [0.9, -0.08], [0.74, 0.04], [0.81, 0.16], [0.64, 0.27],
-    [0.71, 0.36], [0.5, 0.44], [0.34, 0.5],
-  ].map(function (point) { return new THREE.Vector2(point[0], point[1]); });
-  const geometry = new THREE.LatheGeometry(profile, 24);
-  const position = geometry.attributes.position;
-  for (let vertex = 0; vertex < position.count; vertex += 1) {
-    const x = position.getX(vertex);
-    const y = position.getY(vertex);
-    const z = position.getZ(vertex);
-    const angle = Math.atan2(z, x);
-    const erosion = 1
-      + Math.sin(angle * 4 + seed * 1.9 + y * 7) * 0.07
-      + Math.sin(angle * 9 - seed + y * 13) * 0.035;
-    position.setX(vertex, x * erosion);
-    position.setZ(vertex, z * erosion);
+  const rings = [
+    [1.0, -0.5], [1.04, -0.42], [0.92, -0.34], [0.88, -0.18],
+    [0.76, -0.12], [0.72, 0.04], [0.64, 0.1], [0.6, 0.26],
+    [0.48, 0.32], [0.45, 0.43], [0.36, 0.5],
+  ];
+  const segments = 18;
+  const vertices = [];
+  const uvs = [];
+  const indices = [];
+  rings.forEach(function (ring, ringIndex) {
+    const heightRatio = ringIndex / (rings.length - 1);
+    const centerX = Math.sin(seed * 2.1 + ringIndex * 0.71) * 0.08 * heightRatio;
+    const centerZ = Math.cos(seed * 1.6 + ringIndex * 0.58) * 0.07 * heightRatio;
+    for (let segment = 0; segment < segments; segment += 1) {
+      const angle = segment / segments * Math.PI * 2;
+      const weathering = 1
+        + Math.sin(angle * 3 + seed * 1.8 + ringIndex * 0.47) * 0.095
+        + Math.sin(angle * 7 - seed * 0.9 + ringIndex * 0.29) * 0.045;
+      vertices.push(
+        centerX + Math.cos(angle) * ring[0] * weathering,
+        ring[1],
+        centerZ + Math.sin(angle) * ring[0] * weathering,
+      );
+      uvs.push(segment / segments, heightRatio);
+    }
+  });
+  for (let ringIndex = 0; ringIndex < rings.length - 1; ringIndex += 1) {
+    for (let segment = 0; segment < segments; segment += 1) {
+      const nextSegment = (segment + 1) % segments;
+      const lower = ringIndex * segments + segment;
+      const lowerNext = ringIndex * segments + nextSegment;
+      const upper = (ringIndex + 1) * segments + segment;
+      const upperNext = (ringIndex + 1) * segments + nextSegment;
+      indices.push(lower, upper, lowerNext, lowerNext, upper, upperNext);
+    }
   }
-  position.needsUpdate = true;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
 }
@@ -791,35 +827,42 @@ function makeMaterial(color, roughness, metalness) {
   });
 }
 
-function createAsphaltTexture() {
-  if (asphaltTexture) return asphaltTexture;
-  asphaltTexture = textureLoader.load("./maps/asphalt-ai-v41.jpg");
-  asphaltTexture.wrapS = THREE.MirroredRepeatWrapping;
-  asphaltTexture.wrapT = THREE.MirroredRepeatWrapping;
-  asphaltTexture.repeat.set(3.4, 10.8);
-  asphaltTexture.colorSpace = THREE.SRGBColorSpace;
-  asphaltTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
-  return asphaltTexture;
+function createAsphaltTexture(ultra) {
+  if (ultra && asphaltUltraTexture) return asphaltUltraTexture;
+  if (!ultra && asphaltTexture) return asphaltTexture;
+  const texture = textureLoader.load(ultra ? "./maps/asphalt-ultra-v45.jpg" : "./maps/asphalt-ai-v41.jpg");
+  texture.wrapS = THREE.MirroredRepeatWrapping;
+  texture.wrapT = THREE.MirroredRepeatWrapping;
+  texture.repeat.set(ultra ? 3.05 : 3.4, ultra ? 11.6 : 10.8);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  if (ultra) asphaltUltraTexture = texture;
+  else asphaltTexture = texture;
+  return texture;
 }
 
-function createAsphaltReliefTexture() {
-  if (asphaltReliefTexture) return asphaltReliefTexture;
-  asphaltReliefTexture = textureLoader.load("./maps/asphalt-ai-v41.jpg");
-  asphaltReliefTexture.wrapS = THREE.MirroredRepeatWrapping;
-  asphaltReliefTexture.wrapT = THREE.MirroredRepeatWrapping;
-  asphaltReliefTexture.repeat.set(3.4, 10.8);
-  asphaltReliefTexture.colorSpace = THREE.NoColorSpace;
-  asphaltReliefTexture.anisotropy = Math.min(12, renderer.capabilities.getMaxAnisotropy());
-  return asphaltReliefTexture;
+function createAsphaltReliefTexture(ultra) {
+  if (ultra && asphaltUltraReliefTexture) return asphaltUltraReliefTexture;
+  if (!ultra && asphaltReliefTexture) return asphaltReliefTexture;
+  const texture = textureLoader.load(ultra ? "./maps/asphalt-ultra-v45.jpg" : "./maps/asphalt-ai-v41.jpg");
+  texture.wrapS = THREE.MirroredRepeatWrapping;
+  texture.wrapT = THREE.MirroredRepeatWrapping;
+  texture.repeat.set(ultra ? 3.05 : 3.4, ultra ? 11.6 : 10.8);
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  if (ultra) asphaltUltraReliefTexture = texture;
+  else asphaltReliefTexture = texture;
+  return texture;
 }
 
 function createReflectionEnvironment(map) {
   const cacheKey = "reflection-" + map.id;
   if (environmentTextureCache.has(cacheKey)) return environmentTextureCache.get(cacheKey);
   const envCanvas = document.createElement("canvas");
-  envCanvas.width = 1024;
-  envCanvas.height = 512;
+  envCanvas.width = 2048;
+  envCanvas.height = 1024;
   const context = envCanvas.getContext("2d");
+  context.scale(2, 2);
   const skyColor = map.scenery === "city" ? "#112a43" : map.scenery === "canyon" ? "#d78955" : "#9fc8c1";
   const horizonColor = map.scenery === "city" ? "#9ddfff" : map.scenery === "canyon" ? "#ffd2a0" : "#e5f2dd";
   const groundColor = map.scenery === "city" ? "#071018" : map.scenery === "canyon" ? "#4b281d" : "#142720";
@@ -837,6 +880,17 @@ function createReflectionEnvironment(map) {
   glow.addColorStop(1, "rgba(255,255,255,0)");
   context.fillStyle = glow;
   context.fillRect(0, 0, 1024, 512);
+  if (map.scenery === "city") {
+    for (let index = 0; index < 96; index += 1) {
+      const x = (index * 83) % 1024;
+      const width = 4 + index % 7;
+      const height = 5 + (index * 11) % 24;
+      context.globalAlpha = 0.2 + (index % 5) * 0.08;
+      context.fillStyle = index % 4 === 0 ? "#ffd39a" : "#89dfff";
+      context.fillRect(x, 252 - height, width, height);
+    }
+    context.globalAlpha = 1;
+  }
   const texture = new THREE.CanvasTexture(envCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -844,6 +898,8 @@ function createReflectionEnvironment(map) {
   environmentTextureCache.set(cacheKey, texture);
   return texture;
 }
+
+showroomScene.environment = createReflectionEnvironment(maps.city);
 
 function getSceneryMaterial(key, factory) {
   if (!sceneryMaterials.has(key)) sceneryMaterials.set(key, factory());
@@ -857,10 +913,10 @@ function buildProceduralSky(map) {
   });
   skyWorld.clear();
   const palette = map.scenery === "city"
-    ? { top: 0x06162b, horizon: 0x37789e, ground: 0x08111b, sun: 0xa8e7ff, direction: new THREE.Vector3(0.62, 0.32, -0.72) }
+    ? { top: 0x020817, horizon: 0x285c83, ground: 0x040911, sun: 0xbfefff, cloud: 0x18324c, cloudAmount: 0.38, night: 1, direction: new THREE.Vector3(0.62, 0.32, -0.72) }
     : map.scenery === "canyon"
-      ? { top: 0x315574, horizon: 0xf4a86e, ground: 0x6a3428, sun: 0xffe0a6, direction: new THREE.Vector3(0.56, 0.25, -0.8) }
-      : { top: 0x476d80, horizon: 0xd8c69a, ground: 0x20372f, sun: 0xffedbd, direction: new THREE.Vector3(-0.42, 0.3, -0.86) };
+      ? { top: 0x234d70, horizon: 0xf3a16b, ground: 0x54281f, sun: 0xffe6b0, cloud: 0xf0b08a, cloudAmount: 0.24, night: 0, direction: new THREE.Vector3(0.56, 0.25, -0.8) }
+      : { top: 0x365e78, horizon: 0xd8cda9, ground: 0x172f29, sun: 0xffedbd, cloud: 0xd8e5dd, cloudAmount: 0.46, night: 0, direction: new THREE.Vector3(-0.42, 0.3, -0.86) };
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -870,7 +926,11 @@ function buildProceduralSky(map) {
       horizonColor: { value: new THREE.Color(palette.horizon) },
       groundColor: { value: new THREE.Color(palette.ground) },
       sunColor: { value: new THREE.Color(palette.sun) },
+      cloudColor: { value: new THREE.Color(palette.cloud) },
+      cloudAmount: { value: palette.cloudAmount },
+      nightFactor: { value: palette.night },
       sunDirection: { value: palette.direction.normalize() },
+      time: { value: 0 },
     },
     vertexShader: `
       varying vec3 vDirection;
@@ -884,18 +944,47 @@ function buildProceduralSky(map) {
       uniform vec3 horizonColor;
       uniform vec3 groundColor;
       uniform vec3 sunColor;
+      uniform vec3 cloudColor;
+      uniform float cloudAmount;
+      uniform float nightFactor;
       uniform vec3 sunDirection;
+      uniform float time;
       varying vec3 vDirection;
+
+      float hash31(vec3 p) {
+        p = fract(p * 0.1031);
+        p += dot(p, p.yzx + 33.33);
+        return fract((p.x + p.y) * p.z);
+      }
+
       void main() {
-        float heightMix = smoothstep(-0.08, 0.54, vDirection.y);
-        vec3 color = mix(groundColor, horizonColor, smoothstep(-0.18, 0.08, vDirection.y));
+        vec3 direction = normalize(vDirection);
+        float heightMix = smoothstep(-0.08, 0.58, direction.y);
+        vec3 color = mix(groundColor, horizonColor, smoothstep(-0.18, 0.08, direction.y));
         color = mix(color, topColor, heightMix);
-        float sunDot = max(dot(normalize(vDirection), sunDirection), 0.0);
+        float sunDot = max(dot(direction, sunDirection), 0.0);
         float sunDisc = pow(sunDot, 880.0);
-        float sunGlow = pow(sunDot, 27.0) * 0.18;
-        color += sunColor * (sunDisc * 1.45 + sunGlow);
-        float horizonGlow = 1.0 - smoothstep(0.0, 0.34, abs(vDirection.y));
-        color += horizonColor * horizonGlow * 0.11;
+        float sunGlow = pow(sunDot, 18.0) * 0.24;
+        color += sunColor * (sunDisc * 1.55 + sunGlow);
+        float horizonGlow = 1.0 - smoothstep(0.0, 0.34, abs(direction.y));
+        color += horizonColor * horizonGlow * 0.13;
+
+        float cloudBand = smoothstep(-0.02, 0.09, direction.y) * (1.0 - smoothstep(0.5, 0.82, direction.y));
+        float cloudFlow = time * 0.006;
+        float cloudNoise = sin(direction.x * 18.0 + cloudFlow)
+          + sin(direction.z * 13.0 - cloudFlow * 0.7)
+          + sin((direction.x + direction.z) * 29.0 + cloudFlow * 0.42);
+        cloudNoise = cloudNoise / 6.0 + 0.5;
+        float cloudMask = smoothstep(0.5 + (1.0 - cloudAmount) * 0.18, 0.76, cloudNoise) * cloudBand;
+        float cloudLight = 0.42 + pow(max(dot(direction, sunDirection), 0.0), 5.0) * 0.72;
+        color = mix(color, cloudColor * cloudLight + horizonColor * 0.12, cloudMask * cloudAmount);
+
+        float starField = step(0.9978, hash31(floor(direction * 780.0)));
+        starField *= smoothstep(0.12, 0.5, direction.y) * nightFactor;
+        color += vec3(0.68, 0.86, 1.0) * starField * (0.55 + hash31(direction * 331.0));
+
+        float atmosphericDepth = pow(1.0 - max(direction.y, 0.0), 4.0);
+        color += horizonColor * atmosphericDepth * 0.045;
         gl_FragColor = vec4(color, 1.0);
       }
     `,
@@ -904,6 +993,7 @@ function buildProceduralSky(map) {
   sky.frustumCulled = false;
   sky.renderOrder = -100;
   skyWorld.add(sky);
+  activeSkyMaterial = material;
 }
 
 function applyMapBackdrop(map) {
@@ -1252,9 +1342,13 @@ function normalizeImportedCar(source, vehicle) {
         const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
         const preparedMaterials = sourceMaterials.map(function (sourceMaterial) {
           const material = sourceMaterial.clone();
-          material.envMapIntensity = vehicle.materialBoost || 1.25;
-          material.roughness = THREE.MathUtils.clamp((material.roughness === undefined ? 0.5 : material.roughness) * (vehicle.truck ? 0.92 : 0.78), 0.16, 0.76);
+          material.envMapIntensity = (vehicle.materialBoost || 1.25) * 1.28;
+          material.roughness = THREE.MathUtils.clamp((material.roughness === undefined ? 0.5 : material.roughness) * (vehicle.truck ? 0.86 : 0.7), 0.13, 0.72);
           material.metalness = THREE.MathUtils.clamp(material.metalness === undefined ? 0.18 : material.metalness, 0.04, 0.88);
+          if (material.isMeshPhysicalMaterial) {
+            material.clearcoat = Math.max(material.clearcoat || 0, vehicle.truck ? 0.34 : 0.58);
+            material.clearcoatRoughness = vehicle.truck ? 0.3 : 0.2;
+          }
           if (material.normalScale) material.normalScale.multiplyScalar(vehicle.truck ? 0.9 : 0.72);
           if (material.map) material.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
           if (material.normalMap) material.normalMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -1378,7 +1472,7 @@ function resizeShowroom() {
   const rect = showroomCanvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
-  showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.25));
   showroomRenderer.setSize(width, height, false);
   showroomCamera.aspect = width / height;
   showroomCamera.updateProjectionMatrix();
@@ -1700,16 +1794,20 @@ function addPlayerLights(group, vehicle) {
     // The generated PBR model already contains the visible lamp housing. A
     // light source just inside the body gives it a natural glow without adding
     // a detached red box outside the car.
-    const tailGlow = new THREE.PointLight(0xff3348, 0.3, 1.75, 2.8);
+    const tailGlow = new THREE.PointLight(0xff3348, 0.48, 2.4, 2.5);
     tailGlow.position.set(side * tailOffset, lampHeight + 0.02, rearZ - 0.03);
     group.add(tailGlow);
     group.userData.playerTailLights.push(tailGlow);
 
     const target = new THREE.Object3D();
     target.position.set(side * headlightOffset * 0.38, 0.06, frontZ - 24);
-    const headlight = new THREE.SpotLight(0xd9efff, 15, 42, Math.PI / 9, 0.82, 1.65);
+    const headlight = new THREE.SpotLight(0xd9efff, 28, 55, Math.PI / 8.5, 0.78, 1.55);
     headlight.position.set(side * headlightOffset, lampHeight, frontZ);
     headlight.target = target;
+    headlight.castShadow = true;
+    headlight.shadow.mapSize.set(1024, 1024);
+    headlight.shadow.bias = -0.00012;
+    headlight.shadow.normalBias = 0.03;
     group.add(headlight, target);
     group.userData.headlights.push(headlight);
   });
@@ -1724,7 +1822,7 @@ async function createPlayerVehicle(vehicle) {
     const imported = normalizeImportedCar(gltf.scene, vehicle);
     const finishedModel = addPlayerLights(addVehicleAccessories(imported, vehicle), vehicle);
     modelStatus.className = "model-status ready";
-    modelStatus.textContent = "TRIPO PBR 3D MODEL · ACTIVE";
+    modelStatus.textContent = "ULTRA PBR · 4K SHADOWS · ACTIVE";
     return finishedModel;
   } catch (error) {
     console.warn("GLB model unavailable; using the local 3D fallback.", error);
@@ -1795,19 +1893,6 @@ function createCityScenery(side, index, map) {
 function createCanyonScenery(side, index) {
   const group = new THREE.Group();
   const rockTextures = getCanyonRockTextures();
-  const formationMaterials = [0, 1].map(function (shade) {
-    return getSceneryMaterial("canyon-photo-formation-" + shade, function () {
-      return new THREE.MeshBasicMaterial({
-        map: getRedRockTexture(),
-        color: [0xffffff, 0xe8c0a7][shade],
-        transparent: true,
-        alphaTest: 0.18,
-        side: THREE.DoubleSide,
-        depthWrite: true,
-        fog: true,
-      });
-    });
-  });
   const rockMaterials = [0, 1, 2].map(function (shade) {
     return getSceneryMaterial("canyon-natural-rock-" + shade, function () {
       return new THREE.MeshStandardMaterial({
@@ -1839,36 +1924,42 @@ function createCanyonScenery(side, index) {
   const timberMaterial = getSceneryMaterial("canyon-utility-timber", function () { return makeMaterial(0x4a372b, 0.92, 0.02); });
   const cableMaterial = getSceneryMaterial("canyon-utility-cable", function () { return makeMaterial(0x242423, 0.62, 0.28); });
 
-  const rockCount = 3;
+  const rockCount = index % 3 === 0 ? 3 : 2;
   for (let rockIndex = 0; rockIndex < rockCount; rockIndex += 1) {
-    const rock = new THREE.Mesh(sceneryGeometry.rock, rockMaterials[(index + rockIndex) % rockMaterials.length]);
-    const scale = 0.72 + ((index * 3 + rockIndex * 5) % 5) * 0.17;
-    const wide = 1.18 + ((index + rockIndex) % 3) * 0.14;
-    rock.scale.set(scale * wide, scale * (0.68 + (rockIndex % 2) * 0.08), scale * (0.9 + ((index + rockIndex) % 3) * 0.1));
-    rock.position.set(
-      side * (14.1 + (index % 4) * 1.65),
-      scale * 0.48 - 0.12,
-      -8.5 + (index % 5) * 4.1,
+    const isMesa = rockIndex === 0 && index % 2 === 0;
+    const rockGeometry = isMesa
+      ? sceneryGeometry.mesaFormations[(index + rockIndex) % sceneryGeometry.mesaFormations.length]
+      : sceneryGeometry.rock;
+    const rock = new THREE.Mesh(rockGeometry, rockMaterials[(index + rockIndex) % rockMaterials.length]);
+    const scale = 1.25 + ((index * 3 + rockIndex * 5) % 5) * 0.28;
+    const wide = 1.1 + ((index + rockIndex) % 3) * 0.18;
+    rock.scale.set(
+      scale * wide,
+      scale * (isMesa ? 1.8 : 0.64 + (rockIndex % 2) * 0.22),
+      scale * (0.92 + ((index + rockIndex) % 3) * 0.12),
     );
-    rock.rotation.set(rockIndex * 0.19, index * 0.43 + rockIndex * 0.77, (rockIndex % 2 ? -1 : 1) * 0.1);
+    rock.position.set(
+      side * (15.2 + rockIndex * 3.8 + (index % 3) * 1.1),
+      scale * (isMesa ? 0.88 : 0.42) - 0.1,
+      -13 + rockIndex * 8.2 + (index % 4) * 1.1,
+    );
+    rock.rotation.set(rockIndex * 0.045, index * 0.43 + rockIndex * 0.77, (rockIndex % 2 ? -1 : 1) * 0.045);
     rock.castShadow = rockIndex === 0;
     rock.receiveShadow = true;
     group.add(rock);
   }
 
-  const hasPhotographicFormation = index % 7 === 0 || index % 11 === 3;
-  if (hasPhotographicFormation) {
-    const height = 7.4 + (index % 4) * 0.72;
-    const formation = new THREE.Mesh(sceneryGeometry.pinePlane, formationMaterials[index % formationMaterials.length]);
-    formation.scale.set(height * (1.62 + (index % 3) * 0.07), height, 1);
-    formation.position.set(
-      side * (38 + (index % 5) * 4.8),
-      height * 0.49 - 0.2,
-      -12 + (index % 6) * 4.5,
+  if (index % 4 === 0) {
+    const formation = new THREE.Mesh(
+      sceneryGeometry.mesaFormations[index % sceneryGeometry.mesaFormations.length],
+      rockMaterials[index % rockMaterials.length],
     );
-    formation.rotation.y = side * (0.05 + (index % 3) * 0.025);
-    formation.renderOrder = -4;
-    formation.userData.isDistantFormation = true;
+    const formationHeight = 7.8 + (index % 5) * 1.15;
+    formation.scale.set(6.8 + index % 4, formationHeight, 5.4 + index % 3);
+    formation.position.set(side * (36 + (index % 4) * 5.2), formationHeight * 0.49 - 0.15, -11 + (index % 6) * 4.2);
+    formation.rotation.set(0.01, index * 0.32 + side * 0.18, side * 0.018);
+    formation.castShadow = false;
+    formation.receiveShadow = true;
     group.add(formation);
   }
 
@@ -2228,6 +2319,23 @@ function buildAtmosphere(map) {
     atmosphereWorld.add(clouds);
     atmosphereLayers.push(clouds);
   }
+
+  const hazeMaterial = new THREE.SpriteMaterial({
+    color: map.scenery === "city" ? 0x5aa7d7 : map.scenery === "canyon" ? 0xffa16f : 0x9dcdbd,
+    map: getSoftParticleTexture(),
+    transparent: true,
+    opacity: map.scenery === "city" ? 0.052 : 0.065,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: true,
+  });
+  for (let layer = 0; layer < 7; layer += 1) {
+    const haze = new THREE.Sprite(hazeMaterial.clone());
+    haze.position.set((layer % 2 ? -1 : 1) * (12 + layer * 7.5), 5.5 + layer * 1.1, -92 - layer * 44);
+    haze.scale.set(58 + layer * 11, 15 + layer * 2.7, 1);
+    haze.material.opacity *= 1 - layer * 0.065;
+    atmosphereWorld.add(haze);
+  }
 }
 
 function createRouteLandmark(map, index) {
@@ -2392,15 +2500,17 @@ function buildRoad(map) {
   vehicleRim.intensity = map.scenery === "city" ? 1.45 : 1.05;
   renderer.toneMappingExposure = map.scenery === "city" ? 1.12 : map.scenery === "canyon" ? 1.06 : 1.1;
 
-  const roadMaterial = makeMaterial(
-    map.road,
-    map.scenery === "city" ? 0.48 : map.scenery === "forest" ? 0.7 : 0.84,
-    map.scenery === "city" ? 0.16 : 0.04,
-  );
-  roadMaterial.map = createAsphaltTexture();
-  roadMaterial.bumpMap = createAsphaltReliefTexture();
-  roadMaterial.bumpScale = map.scenery === "city" ? 0.055 : 0.085;
-  roadMaterial.envMapIntensity = map.scenery === "city" ? 1.15 : 0.52;
+  const roadMaterial = new THREE.MeshPhysicalMaterial({
+    color: map.scenery === "city" ? 0x0b1219 : map.road,
+    roughness: map.scenery === "city" ? 0.38 : map.scenery === "forest" ? 0.69 : 0.82,
+    metalness: map.scenery === "city" ? 0.16 : 0.035,
+    clearcoat: map.scenery === "city" ? 0.66 : 0.12,
+    clearcoatRoughness: map.scenery === "city" ? 0.3 : 0.68,
+    envMapIntensity: map.scenery === "city" ? 1.18 : 0.58,
+  });
+  roadMaterial.map = createAsphaltTexture(map.scenery === "city");
+  roadMaterial.bumpMap = createAsphaltReliefTexture(map.scenery === "city");
+  roadMaterial.bumpScale = map.scenery === "city" ? 0.075 : 0.095;
   const shoulderMaterial = makeMaterial(map.shoulder, 0.93, 0.02);
   shoulderMaterial.map = createTerrainTexture(map);
   if (map.scenery === "forest") {
@@ -2444,6 +2554,40 @@ function buildRoad(map) {
   });
   const roadWearGeometry = new THREE.PlaneGeometry(0.42, SEGMENT_LENGTH + 0.7);
   const rumbleGeometry = new THREE.BoxGeometry(0.3, 0.026, 1.35);
+  const wetReflectionGeometry = new THREE.PlaneGeometry(0.68, SEGMENT_LENGTH + 0.65);
+  const wetReflectionMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x8dcff0,
+    roughness: 0.12,
+    metalness: 0.38,
+    clearcoat: 1,
+    clearcoatRoughness: 0.08,
+    transparent: true,
+    opacity: 0.055,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const lampPoolGeometry = new THREE.CircleGeometry(1, 28);
+  const lampPoolMaterials = [0x86dfff, 0xffca83].map(function (color) {
+    return new THREE.MeshBasicMaterial({
+      color,
+      map: getSoftParticleTexture(),
+      transparent: true,
+      opacity: 0.085,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+  });
+  const lampHaloMaterials = [0x9ee9ff, 0xffd39a].map(function (color) {
+    return new THREE.SpriteMaterial({
+      color,
+      map: getSoftParticleTexture(),
+      transparent: true,
+      opacity: 0.52,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+  });
   const beaconMaterial = new THREE.MeshBasicMaterial({ color: map.accent });
   const signMaterial = new THREE.MeshStandardMaterial({
     color: map.scenery === "canyon" ? 0x5e2e22 : map.scenery === "forest" ? 0x173f31 : 0x172c43,
@@ -2485,6 +2629,16 @@ function buildRoad(map) {
         segment.add(wear);
       });
     });
+
+    if (map.scenery === "city") {
+      LANE_X.forEach(function (laneX, laneIndex) {
+        const reflection = new THREE.Mesh(wetReflectionGeometry, wetReflectionMaterial);
+        reflection.rotation.x = -Math.PI / 2;
+        reflection.position.set(laneX + (laneIndex - 1) * 0.18, 0.012, 0);
+        reflection.scale.x = laneIndex === 1 ? 1.35 : 0.9;
+        segment.add(reflection);
+      });
+    }
 
     if (map.scenery === "city" && index % 2 === 0) {
       [-1, 1].forEach(function (side) {
@@ -2566,7 +2720,17 @@ function buildRoad(map) {
             new THREE.MeshStandardMaterial({ color: 0xe5f2ff, emissive: lampIndex ? 0xffce91 : 0x9fdfff, emissiveIntensity: 4.2, roughness: 0.18 }),
           );
           lamp.position.set(side * 9.55, 5.32, z);
-          segment.add(pole, arm, lamp);
+          const halo = new THREE.Sprite(lampHaloMaterials[lampIndex]);
+          halo.position.copy(lamp.position);
+          halo.scale.set(1.45, 1.45, 1.45);
+          segment.add(pole, arm, lamp, halo);
+          if (index % 2 === 0) {
+            const lightPool = new THREE.Mesh(lampPoolGeometry, lampPoolMaterials[lampIndex]);
+            lightPool.rotation.x = -Math.PI / 2;
+            lightPool.position.set(side * 8.15, 0.024, z);
+            lightPool.scale.set(2.5, 5.4, 1);
+            segment.add(lightPool);
+          }
         });
       }
       if ((index + (side > 0 ? 1 : 0)) % 2 === 0) {
@@ -2709,30 +2873,92 @@ function buildTraffic(map, playerVehicleId) {
   }
 }
 
+const archivePageTextureCache = new Map();
+
+function getArchivePageTexture(map) {
+  if (archivePageTextureCache.has(map.id)) return archivePageTextureCache.get(map.id);
+  const pageCanvas = document.createElement("canvas");
+  pageCanvas.width = 512;
+  pageCanvas.height = 704;
+  const context = pageCanvas.getContext("2d");
+  const accent = "#" + new THREE.Color(map.accent).getHexString();
+  context.fillStyle = "#e8e1d0";
+  context.fillRect(0, 0, 512, 704);
+  context.strokeStyle = "#26313a";
+  context.lineWidth = 12;
+  context.strokeRect(22, 22, 468, 660);
+  context.fillStyle = accent;
+  context.fillRect(22, 22, 468, 22);
+  context.fillStyle = "#1b252d";
+  context.font = "700 28px Arial";
+  context.fillText("THE DRAWN MOTION", 54, 92);
+  context.font = "600 16px Arial";
+  context.fillText("LOST ARCHIVE SKETCH", 56, 122);
+  context.strokeStyle = "#30373b";
+  context.lineWidth = 9;
+  context.lineCap = "round";
+  context.beginPath();
+  context.moveTo(78, 421);
+  context.bezierCurveTo(104, 330, 168, 278, 255, 270);
+  context.bezierCurveTo(338, 268, 411, 323, 440, 414);
+  context.lineTo(407, 443);
+  context.lineTo(105, 443);
+  context.closePath();
+  context.stroke();
+  context.beginPath();
+  context.arc(151, 448, 48, 0, Math.PI * 2);
+  context.arc(365, 448, 48, 0, Math.PI * 2);
+  context.stroke();
+  context.lineWidth = 5;
+  context.beginPath();
+  context.moveTo(172, 331);
+  context.lineTo(224, 289);
+  context.lineTo(321, 290);
+  context.lineTo(354, 334);
+  context.stroke();
+  for (let row = 0; row < 2; row += 1) {
+    for (let column = 0; column < 11; column += 1) {
+      context.fillStyle = (row + column) % 2 ? "#cbbf9c" : "#1f2a32";
+      context.fillRect(56 + column * 36, 574 + row * 34, 30, 28);
+    }
+  }
+  context.fillStyle = accent;
+  context.fillRect(56, 652, 152, 10);
+  const texture = new THREE.CanvasTexture(pageCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  archivePageTextureCache.set(map.id, texture);
+  return texture;
+}
+
 function buildCollectibles(map) {
   collectibleWorld.clear();
   collectibleCards.length = 0;
   map.pages.forEach(function (distance, index) {
     const group = new THREE.Group();
-    const glow = new THREE.PointLight(map.accent, 3.6, 13);
-    glow.position.y = 2.1;
+    const glow = new THREE.PointLight(map.accent, 2.1, 10);
+    glow.position.y = 1.45;
     const card = new THREE.Mesh(
-      new THREE.BoxGeometry(1.05, 1.45, 0.08),
-      new THREE.MeshStandardMaterial({
-        color: 0xe9efec,
-        roughness: 0.55,
+      new THREE.BoxGeometry(0.72, 0.98, 0.026),
+      new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        map: getArchivePageTexture(map),
+        roughness: 0.78,
+        metalness: 0,
+        clearcoat: 0.18,
+        clearcoatRoughness: 0.72,
         emissive: map.accent,
-        emissiveIntensity: 0.15,
+        emissiveIntensity: 0.055,
       }),
     );
-    card.position.y = 1.55;
+    card.position.y = 1.32;
     card.castShadow = true;
-    const stripe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.78, 0.14, 0.04),
-      new THREE.MeshBasicMaterial({ color: map.accent }),
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.58, 0.018, 8, 48),
+      new THREE.MeshBasicMaterial({ color: map.accent, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending }),
     );
-    stripe.position.set(0, 1.88, 0.07);
-    group.add(card, stripe, glow);
+    ring.position.y = 1.31;
+    group.add(card, ring, glow);
     group.userData.distance = distance;
     group.userData.index = index;
     group.userData.collected = false;
@@ -2747,7 +2973,7 @@ function resizeRenderer() {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   renderer.setPixelRatio(dpr);
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
@@ -3174,8 +3400,10 @@ function updateWorld(dt, time) {
     const delta = card.userData.distance - race.distance;
     card.position.z = PLAYER_Z - delta * WORLD_SCALE;
     card.position.x = card.userData.laneX;
-    card.rotation.y = time * 1.6 + card.userData.index;
-    card.visible = delta > -35 && delta < 900;
+    card.position.y = Math.sin(time * 1.8 + card.userData.index * 1.7) * 0.1;
+    card.rotation.y = time * 0.72 + card.userData.index;
+    card.rotation.z = Math.sin(time * 0.9 + card.userData.index) * 0.035;
+    card.visible = delta > -35 && delta < 520;
     if (delta < 24 && delta > -12 && Math.abs(card.position.x - race.playerX) < 1.8) {
       collectPage(card.userData.index);
       card.userData.collected = true;
@@ -3415,6 +3643,7 @@ function finishRace(reason) {
 function renderScene(time) {
   const race = state.race;
   if (!race) return;
+  if (activeSkyMaterial) activeSkyMaterial.uniforms.time.value = time;
   const speedRatio = THREE.MathUtils.clamp(race.speed / race.vehicle.maxSpeed, 0, 1.2);
   const scenery = race.map.scenery;
   const baseExposure = scenery === "city" ? 1.12 : scenery === "canyon" ? 1.06 : 1.1;
