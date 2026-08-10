@@ -10,7 +10,7 @@ const vehicles = {
     className: "ADVENTURE CLASS",
     image: "./cars/silverado-front.jpg",
     resultImage: "./cars/silverado-rear.jpg",
-    model: "./models/generated/silverado-web.glb",
+    model: "./models/generated/silverado-wheels.glb",
     maxSpeed: 170,
     acceleration: 42,
     brake: 72,
@@ -43,7 +43,7 @@ const vehicles = {
     className: "GRAND TOURER CLASS",
     image: "./cars/clk55-city.jpg",
     resultImage: "./cars/clk55-rear.jpg",
-    model: "./models/generated/clk55-web.glb",
+    model: "./models/generated/clk55-wheels.glb",
     maxSpeed: 240,
     acceleration: 56,
     brake: 84,
@@ -2034,7 +2034,10 @@ function animateVehicleWheels(root, rotationStep, steer) {
   if (!root) return;
   const motionOpacity = THREE.MathUtils.clamp(Math.abs(rotationStep) * 8.5, 0, 0.52);
   root.traverse(function (child) {
-    if (child.userData.isWheelSpin) child.rotation.x -= rotationStep;
+    if (child.userData.isWheelSpin) {
+      if (child.userData.wheelSpinAxis === "z") child.rotation.z -= rotationStep;
+      else child.rotation.x -= rotationStep;
+    }
     if (child.userData.isSteeringWheel) child.rotation.y = THREE.MathUtils.lerp(child.rotation.y, (steer || 0) * 0.28, 0.18);
     if (child.userData.isWheelMotionLayer && child.material) {
       child.material.opacity = THREE.MathUtils.lerp(child.material.opacity, motionOpacity, 0.22);
@@ -2126,6 +2129,7 @@ function tagSeparatedWheelMeshes(group) {
   group.traverse(function (child) {
     if (!child.isMesh || !/(wheel|tire|tyre|rim)/i.test(child.name || "")) return;
     child.userData.isWheelSpin = true;
+    child.userData.wheelSpinAxis = child.userData.wheelSpinAxis || "z";
     count += 1;
   });
   group.userData.animatedWheelMeshCount = count;
@@ -2136,11 +2140,11 @@ function addVehicleAccessories(group, vehicle) {
   if (vehicle.tripoModel) {
     group.userData.isPhotoBased = false;
     group.userData.isGeneratedPbrModel = true;
-    // Tripo exports these two reference cars as one continuous mesh, so their
-    // baked wheels cannot be rotated independently. Named wheel meshes remain
-    // supported for future GLBs; current cars get aligned, speed-controlled
-    // rim motion layers without replacing or distorting the original body.
+    // Build 49 models contain wheel-center geometry split around its true axle.
+    // Future models with named wheel, tire or rim meshes use the same rig; the
+    // visual motion layer remains a safe fallback for older one-piece exports.
     tagSeparatedWheelMeshes(group);
+    if (group.userData.animatedWheelMeshCount > 0) return group;
     return installWheelMotionLayers(group, vehicle);
   }
   // The single-view AI mesh is kept only as an internal scale reference. It is
