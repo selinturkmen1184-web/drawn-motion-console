@@ -11,6 +11,7 @@ const vehicles = {
     image: "./cars/silverado-front.jpg",
     resultImage: "./cars/silverado-rear.jpg",
     model: "./models/generated/silverado-wheels.glb",
+    trafficModel: "./models/generated/silverado-traffic.glb",
     maxSpeed: 170,
     acceleration: 42,
     brake: 72,
@@ -44,6 +45,7 @@ const vehicles = {
     image: "./cars/clk55-city.jpg",
     resultImage: "./cars/clk55-rear.jpg",
     model: "./models/generated/clk55-wheels.glb",
+    trafficModel: "./models/generated/clk55-traffic.glb",
     maxSpeed: 240,
     acceleration: 56,
     brake: 84,
@@ -178,11 +180,11 @@ const driverProfile = Object.assign({
 }, readStoredJson("tdm-driver-profile-v46", {}));
 
 const consoleSettings = Object.assign({
-  quality: "ultra",
+  quality: "high",
   weather: true,
   shake: true,
   haptics: true,
-}, readStoredJson("tdm-console-settings-v46", {}));
+}, readStoredJson("tdm-console-settings-v50", {}));
 
 function saveDriverProfile() {
   localStorage.setItem("tdm-driver-profile-v46", JSON.stringify(driverProfile));
@@ -190,7 +192,7 @@ function saveDriverProfile() {
 }
 
 function saveConsoleSettings() {
-  localStorage.setItem("tdm-console-settings-v46", JSON.stringify(consoleSettings));
+  localStorage.setItem("tdm-console-settings-v50", JSON.stringify(consoleSettings));
 }
 
 const app = document.getElementById("app");
@@ -315,7 +317,7 @@ const renderer = new THREE.WebGLRenderer({
   precision: "highp",
   powerPreference: "high-performance",
 });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -332,7 +334,7 @@ const showroomRenderer = new THREE.WebGLRenderer({
   alpha: true,
   powerPreference: "high-performance",
 });
-showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.25));
+showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
 showroomRenderer.outputColorSpace = THREE.SRGBColorSpace;
 showroomRenderer.toneMapping = THREE.ACESFilmicToneMapping;
 showroomRenderer.toneMappingExposure = 1.05;
@@ -345,7 +347,7 @@ const showroomHemisphere = new THREE.HemisphereLight(0xd7f5ff, 0x111722, 2.7);
 const showroomKey = new THREE.DirectionalLight(0xffffff, 4.2);
 showroomKey.position.set(-5, 8, 6);
 showroomKey.castShadow = true;
-showroomKey.shadow.mapSize.set(2048, 2048);
+showroomKey.shadow.mapSize.set(1024, 1024);
 const showroomRim = new THREE.DirectionalLight(0x68e1ff, 3.2);
 showroomRim.position.set(7, 3, -5);
 const showroomFloor = new THREE.Mesh(
@@ -370,7 +372,7 @@ scene.add(hemisphere);
 const sun = new THREE.DirectionalLight(0xf2f8ff, 3.05);
 sun.position.set(-12, 24, 10);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.camera.left = -24;
 sun.shadow.camera.right = 24;
 sun.shadow.camera.top = 30;
@@ -396,7 +398,7 @@ world.add(skyWorld, roadWorld, trafficWorld, collectibleWorld, eventWorld, atmos
 scene.add(world);
 
 const SEGMENT_LENGTH = 42;
-const SEGMENT_COUNT = 24;
+const SEGMENT_COUNT = 20;
 const PLAYER_Z = 4;
 const LANE_X = [-5.1, 0, 5.1];
 const WORLD_SCALE = 0.24;
@@ -415,6 +417,7 @@ dracoLoader.setDecoderPath("./vendor/draco/gltf/");
 gltfLoader.setDRACOLoader(dracoLoader);
 gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 const modelCache = new Map();
+const trafficModelCache = new Map();
 const trafficModelPrototypes = new Map();
 const environmentTextureCache = new Map();
 const textureLoader = new THREE.TextureLoader();
@@ -817,11 +820,11 @@ function syncSettingsUi() {
 
 function applyGraphicsQuality() {
   const qualities = {
-    performance: { dpr: 1.2, showroomDpr: 1.2, shadow: 1024 },
-    high: { dpr: 1.8, showroomDpr: 1.65, shadow: 2048 },
-    ultra: { dpr: 2.5, showroomDpr: 2.25, shadow: 4096 },
+    performance: { dpr: 0.9, showroomDpr: 1, shadow: 512 },
+    high: { dpr: 1.25, showroomDpr: 1.2, shadow: 1024 },
+    ultra: { dpr: 1.6, showroomDpr: 1.45, shadow: 2048 },
   };
-  const quality = qualities[consoleSettings.quality] || qualities.ultra;
+  const quality = qualities[consoleSettings.quality] || qualities.high;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.dpr));
   showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.showroomDpr));
   sun.shadow.mapSize.set(quality.shadow, quality.shadow);
@@ -1704,11 +1707,18 @@ function warmVehicleModel(vehicle) {
   return modelCache.get(vehicle.id);
 }
 
+function warmTrafficModel(vehicle) {
+  if (!trafficModelCache.has(vehicle.id)) {
+    trafficModelCache.set(vehicle.id, gltfLoader.loadAsync(vehicle.trafficModel || vehicle.model));
+  }
+  return trafficModelCache.get(vehicle.id);
+}
+
 function resizeShowroom() {
   const rect = showroomCanvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
-  const dprCap = consoleSettings.quality === "performance" ? 1.2 : consoleSettings.quality === "high" ? 1.65 : 2.25;
+  const dprCap = consoleSettings.quality === "performance" ? 1 : consoleSettings.quality === "high" ? 1.2 : 1.45;
   showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap));
   showroomRenderer.setSize(width, height, false);
   showroomCamera.aspect = width / height;
@@ -1807,16 +1817,24 @@ showroomStage.addEventListener("dblclick", function () {
 });
 showroom.raf = requestAnimationFrame(renderShowroom);
 
-async function prepareTrafficModelPrototypes() {
+async function prepareTrafficModelPrototypes(playerVehicleId) {
   const activeVehicleIds = collectionCatalog
-    .filter(function (entry) { return entry.status === "active" && entry.vehicleId && vehicles[entry.vehicleId]; })
-    .map(function (entry) { return entry.vehicleId; });
+    .filter(function (entry) {
+      return entry.status === "active" && entry.vehicleId && entry.vehicleId !== playerVehicleId && vehicles[entry.vehicleId];
+    })
+    .map(function (entry) { return entry.vehicleId; })
+    .slice(0, 5);
   await Promise.all(activeVehicleIds.map(async function (vehicleId) {
     if (trafficModelPrototypes.has(vehicleId)) return;
     const vehicle = vehicles[vehicleId];
     try {
-      const gltf = await warmVehicleModel(vehicle);
+      const gltf = await warmTrafficModel(vehicle);
       const prototype = addVehicleAccessories(normalizeImportedCar(gltf.scene, vehicle), vehicle);
+      prototype.traverse(function (child) {
+        if (!child.isMesh) return;
+        child.castShadow = false;
+        child.receiveShadow = false;
+      });
       prototype.add(createContactShadow(vehicle));
       trafficModelPrototypes.set(vehicleId, prototype);
     } catch (error) {
@@ -2202,7 +2220,7 @@ async function createPlayerVehicle(vehicle) {
     const imported = normalizeImportedCar(gltf.scene, vehicle);
     const finishedModel = addPlayerLights(addVehicleAccessories(imported, vehicle), vehicle);
     modelStatus.className = "model-status ready";
-    modelStatus.textContent = "ULTRA PBR · 4K SHADOWS · ACTIVE";
+    modelStatus.textContent = consoleSettings.quality.toUpperCase() + " PBR · OPTIMIZED SHADOWS · ACTIVE";
     return finishedModel;
   } catch (error) {
     console.warn("GLB model unavailable; using the local 3D fallback.", error);
@@ -3526,7 +3544,7 @@ function resizeRenderer() {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
-  const dprCap = consoleSettings.quality === "performance" ? 1.2 : consoleSettings.quality === "high" ? 1.8 : 2.5;
+  const dprCap = consoleSettings.quality === "performance" ? 0.9 : consoleSettings.quality === "high" ? 1.25 : 1.6;
   const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
   renderer.setPixelRatio(dpr);
   renderer.setSize(width, height, false);
@@ -3632,7 +3650,7 @@ async function startRace() {
 
   if (playerCar) scene.remove(playerCar);
   const playerVehiclePromise = createPlayerVehicle(vehicle);
-  await prepareTrafficModelPrototypes();
+  await prepareTrafficModelPrototypes(vehicle.id);
   buildTraffic(map, vehicle.id);
   playerCar = await playerVehiclePromise;
   if (!state.race || state.race.vehicle.id !== vehicle.id || state.screen !== "game") return;
