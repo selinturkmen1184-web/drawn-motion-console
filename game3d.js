@@ -27,14 +27,18 @@ const vehicles = {
     wheelVisualZ: [-1.72, 1.72],
     color: 0xe7e5db,
     modelRotation: 0,
-    rideHeight: 0.025,
+    modelPitch: -0.025,
+    rideHeight: 0,
     materialBoost: 1.18,
     cameraHeightBias: 0.06,
     cameraDistanceBias: 0.8,
     viewYaw: 0,
     archiveLabel: "ARCHIVE 001 / ADVENTURE",
     ownerInstagram: "@MANDOL_OUTDOORS",
-    showroomDistance: 7.6,
+    showroomDistance: 6.35,
+    showroomCameraHeight: 2.05,
+    showroomLookY: 0.9,
+    showroomYaw: -1.1,
     truck: true,
     tripoModel: true,
   },
@@ -1788,7 +1792,6 @@ function renderShowroom(timeMs) {
     showroom.yaw = THREE.MathUtils.lerp(showroom.yaw, showroom.targetYaw, 1 - Math.pow(0.0008, dt));
     if (showroom.model) {
       showroom.model.rotation.y = showroom.yaw;
-      animateVehicleWheels(showroom.model, dt * 0.72, 0.05);
     }
     showroomRenderer.render(showroomScene, showroomCamera);
   }
