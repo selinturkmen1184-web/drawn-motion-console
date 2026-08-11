@@ -61,14 +61,18 @@ const vehicles = {
     wheelVisualZ: [-1.38, 1.38],
     color: 0xa66f53,
     modelRotation: 0,
-    rideHeight: 0.012,
+    modelPitch: -0.045,
+    rideHeight: 0,
     materialBoost: 1.42,
     cameraHeightBias: 0.08,
     cameraDistanceBias: 1.15,
     viewYaw: 0,
     archiveLabel: "ARCHIVE 002 / GRAND TOURER",
     ownerInstagram: "@OWNER_TO_BE_CONFIRMED",
-    showroomDistance: 6.7,
+    showroomDistance: 5.65,
+    showroomCameraHeight: 1.58,
+    showroomLookY: 0.62,
+    showroomYaw: -0.78,
     truck: false,
     tripoModel: true,
   },
@@ -1649,6 +1653,8 @@ function normalizeImportedCar(source, vehicle) {
   root.updateMatrixWorld(true);
   const axisCorrection = getVehicleAxisCorrection(root);
   root.rotation.y += axisCorrection + (vehicle.modelRotation || 0);
+  root.rotation.x += vehicle.modelPitch || 0;
+  root.rotation.z += vehicle.modelRoll || 0;
   root.updateMatrixWorld(true);
   let box = new THREE.Box3().setFromObject(root);
   let size = box.getSize(new THREE.Vector3());
@@ -1744,10 +1750,16 @@ async function loadShowroomVehicle(id) {
     model.add(createContactShadow(vehicle));
     if (showroom.model) showroomScene.remove(showroom.model);
     showroom.model = model;
+    showroom.yaw = vehicle.showroomYaw ?? -0.42;
+    showroom.targetYaw = showroom.yaw;
     showroom.model.rotation.y = showroom.yaw;
     showroomScene.add(model);
-    showroomCamera.position.set(0, Math.max(2.1, vehicle.targetHeight * 1.55), vehicle.showroomDistance || 8.4);
-    showroomCamera.lookAt(0, vehicle.targetHeight * 0.58, 0);
+    showroomCamera.position.set(
+      0,
+      vehicle.showroomCameraHeight ?? Math.max(2.1, vehicle.targetHeight * 1.55),
+      vehicle.showroomDistance || 8.4,
+    );
+    showroomCamera.lookAt(0, vehicle.showroomLookY ?? vehicle.targetHeight * 0.58, 0);
     showroomLoading.textContent = "REAL-TIME PBR MODEL READY";
     window.setTimeout(function () {
       if (token === showroom.loadToken) showroomLoading.classList.add("ready");
@@ -1772,7 +1784,7 @@ function renderShowroom(timeMs) {
   const dt = Math.min(0.05, Math.max(0, (timeMs - showroom.lastTime) / 1000));
   showroom.lastTime = timeMs;
   if (state.screen === "vehicle") {
-    if (showroom.autoRotate && !showroom.dragging) showroom.targetYaw += dt * 0.36;
+    if (showroom.autoRotate && !showroom.dragging) showroom.targetYaw += dt * 0.22;
     showroom.yaw = THREE.MathUtils.lerp(showroom.yaw, showroom.targetYaw, 1 - Math.pow(0.0008, dt));
     if (showroom.model) {
       showroom.model.rotation.y = showroom.yaw;
@@ -1812,7 +1824,7 @@ document.getElementById("showroomRight").addEventListener("click", function () {
 });
 showroomAutoButton.addEventListener("click", function () { setShowroomAuto(!showroom.autoRotate); });
 showroomStage.addEventListener("dblclick", function () {
-  showroom.targetYaw = -0.42;
+  showroom.targetYaw = vehicles[showroom.vehicleId]?.showroomYaw ?? -0.42;
   setShowroomAuto(true);
 });
 showroom.raf = requestAnimationFrame(renderShowroom);
