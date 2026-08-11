@@ -11,6 +11,7 @@ const vehicles = {
     image: "./cars/silverado-front.jpg",
     resultImage: "./cars/silverado-rear.jpg",
     model: "./models/generated/silverado.glb",
+    showroomModel: "./models/generated/silverado-web.glb",
     trafficModel: "./models/generated/silverado-traffic.glb",
     maxSpeed: 170,
     acceleration: 42,
@@ -48,6 +49,7 @@ const vehicles = {
     image: "./cars/clk55-city.jpg",
     resultImage: "./cars/clk55-rear.jpg",
     model: "./models/generated/clk55.glb",
+    showroomModel: "./models/generated/clk55-web.glb",
     trafficModel: "./models/generated/clk55-traffic.glb",
     maxSpeed: 240,
     acceleration: 56,
@@ -326,6 +328,8 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
@@ -423,6 +427,7 @@ dracoLoader.setDecoderPath("./vendor/draco/gltf/");
 gltfLoader.setDRACOLoader(dracoLoader);
 gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 const modelCache = new Map();
+const showroomModelCache = new Map();
 const trafficModelCache = new Map();
 const trafficModelPrototypes = new Map();
 const environmentTextureCache = new Map();
@@ -443,6 +448,11 @@ let alpineGraniteTexture = null;
 let alpineGraniteReliefTexture = null;
 let softParticleTexture = null;
 let activeSkyMaterial = null;
+let dynamicRenderScale = 1;
+let performanceSampleTime = 0;
+let performanceFrameTime = 0;
+let performanceSampleFrames = 0;
+let renderFrameCount = 0;
 const sceneryMaterials = new Map();
 
 function createEvergreenCrownGeometry(seed) {
@@ -826,12 +836,12 @@ function syncSettingsUi() {
 
 function applyGraphicsQuality() {
   const qualities = {
-    performance: { dpr: 0.9, showroomDpr: 1, shadow: 512 },
-    high: { dpr: 1.25, showroomDpr: 1.2, shadow: 1024 },
-    ultra: { dpr: 1.6, showroomDpr: 1.45, shadow: 2048 },
+    performance: { dpr: 0.82, showroomDpr: 1, shadow: 256 },
+    high: { dpr: 1.05, showroomDpr: 1.15, shadow: 512 },
+    ultra: { dpr: 1.3, showroomDpr: 1.35, shadow: 1024 },
   };
   const quality = qualities[consoleSettings.quality] || qualities.high;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.dpr));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.dpr * dynamicRenderScale));
   showroomRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.showroomDpr));
   sun.shadow.mapSize.set(quality.shadow, quality.shadow);
   showroomKey.shadow.mapSize.set(Math.min(2048, quality.shadow), Math.min(2048, quality.shadow));
@@ -1715,6 +1725,13 @@ function warmVehicleModel(vehicle) {
   return modelCache.get(vehicle.id);
 }
 
+function warmShowroomModel(vehicle) {
+  if (!showroomModelCache.has(vehicle.id)) {
+    showroomModelCache.set(vehicle.id, gltfLoader.loadAsync(vehicle.showroomModel || vehicle.model));
+  }
+  return showroomModelCache.get(vehicle.id);
+}
+
 function warmTrafficModel(vehicle) {
   if (!trafficModelCache.has(vehicle.id)) {
     trafficModelCache.set(vehicle.id, gltfLoader.loadAsync(vehicle.trafficModel || vehicle.model));
@@ -1745,7 +1762,7 @@ async function loadShowroomVehicle(id) {
   showroomArchive.textContent = vehicle.archiveLabel;
   showroomOwner.textContent = vehicle.ownerInstagram;
   try {
-    const gltf = await warmVehicleModel(vehicle);
+    const gltf = await warmShowroomModel(vehicle);
     if (token !== showroom.loadToken) return;
     const model = addVehicleAccessories(normalizeImportedCar(gltf.scene, vehicle), vehicle);
     model.traverse(function (child) { if (child.userData.isWheelRig) child.visible = false; });
@@ -2215,8 +2232,7 @@ function addPlayerLights(group, vehicle) {
     const headlight = new THREE.SpotLight(0xd9efff, 28, 55, Math.PI / 8.5, 0.78, 1.55);
     headlight.position.set(side * headlightOffset, lampHeight, frontZ);
     headlight.target = target;
-    headlight.castShadow = true;
-    headlight.shadow.mapSize.set(1024, 1024);
+    headlight.castShadow = false;
     headlight.shadow.bias = -0.00012;
     headlight.shadow.normalBias = 0.03;
     group.add(headlight, target);
@@ -3557,12 +3573,31 @@ function resizeRenderer() {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
-  const dprCap = consoleSettings.quality === "performance" ? 0.9 : consoleSettings.quality === "high" ? 1.25 : 1.6;
-  const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+  const dprCap = consoleSettings.quality === "performance" ? 0.82 : consoleSettings.quality === "high" ? 1.05 : 1.3;
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap * dynamicRenderScale);
   renderer.setPixelRatio(dpr);
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+}
+
+function updatePerformanceGovernor(frameTime) {
+  if (!Number.isFinite(frameTime) || frameTime <= 0 || frameTime > 0.2) return;
+  performanceSampleTime += frameTime;
+  performanceFrameTime += frameTime;
+  performanceSampleFrames += 1;
+  if (performanceSampleTime < 1.4) return;
+  const averageFrameTime = performanceFrameTime / Math.max(1, performanceSampleFrames);
+  let nextScale = dynamicRenderScale;
+  if (averageFrameTime > 0.027) nextScale = Math.max(0.78, dynamicRenderScale - 0.1);
+  else if (averageFrameTime > 0.021) nextScale = Math.max(0.84, dynamicRenderScale - 0.05);
+  else if (averageFrameTime < 0.0172) nextScale = Math.min(1, dynamicRenderScale + 0.04);
+  performanceSampleTime = 0;
+  performanceFrameTime = 0;
+  performanceSampleFrames = 0;
+  if (Math.abs(nextScale - dynamicRenderScale) < 0.01) return;
+  dynamicRenderScale = nextScale;
+  resizeRenderer();
 }
 
 window.addEventListener("resize", function () {
@@ -3589,6 +3624,8 @@ async function startRace() {
     speed: 0,
     distance: 0,
     elapsed: 0,
+    hudAccumulator: 0,
+    worldFrame: 0,
     timeRemaining: timedLimit,
     playerX: 0,
     steer: 0,
@@ -3914,6 +3951,8 @@ function recycleTraffic(car, index) {
 function updateWorld(dt, time) {
   const race = state.race;
   const travel = race.speed * dt * WORLD_SCALE;
+  race.worldFrame = (race.worldFrame + 1) % 4;
+  const refreshSceneryVisibility = race.worldFrame === 0;
   updateDynamicRoute(race, travel);
   updateAtmosphere(dt, time, travel);
   animatedLandmarkMaterials.forEach(function (material) {
@@ -3928,14 +3967,16 @@ function updateWorld(dt, time) {
   roadSegments.forEach(function (segment) {
     const previousSegmentZ = segment.position.z;
     segment.position.z += travel;
-    segment.children.forEach(function (child) {
-      if (!child.userData || !child.userData.isSceneryCluster) return;
-      child.children.forEach(function (sceneryItem) {
-        if (!sceneryItem.userData || !sceneryItem.userData.isDistantFormation) return;
-        const formationWorldZ = segment.position.z + child.position.z + sceneryItem.position.z;
-        sceneryItem.visible = formationWorldZ < -72;
+    if (refreshSceneryVisibility) {
+      segment.children.forEach(function (child) {
+        if (!child.userData || !child.userData.isSceneryCluster) return;
+        child.children.forEach(function (sceneryItem) {
+          if (!sceneryItem.userData || !sceneryItem.userData.isDistantFormation) return;
+          const formationWorldZ = segment.position.z + child.position.z + sceneryItem.position.z;
+          sceneryItem.visible = formationWorldZ < -72;
+        });
       });
-    });
+    }
     const landmark = segment.userData.landmark;
     if (landmark) {
       const previousLandmarkZ = previousSegmentZ + landmark.position.z;
@@ -4116,8 +4157,13 @@ function updateRace(dt, time) {
 
   screens.game.classList.toggle("boosting", race.boostActive);
   screens.game.classList.toggle("offroad", race.offRoad);
-  driveEffects.style.setProperty("--speed-intensity", Math.max(0, Math.min(1, (speedRatio - 0.46) / 0.54)).toFixed(3));
-  driveEffects.style.setProperty("--cinema-intensity", Math.max(speedRatio * 0.72, race.visualPulse).toFixed(3));
+  race.hudAccumulator += dt;
+  const refreshHud = race.hudAccumulator >= 0.08;
+  if (refreshHud) {
+    race.hudAccumulator = 0;
+    driveEffects.style.setProperty("--speed-intensity", Math.max(0, Math.min(1, (speedRatio - 0.46) / 0.54)).toFixed(3));
+    driveEffects.style.setProperty("--cinema-intensity", Math.max(speedRatio * 0.72, race.visualPulse).toFixed(3));
+  }
 
   if (playerCar) {
     playerCar.position.x = THREE.MathUtils.lerp(playerCar.position.x, race.playerX, 1 - Math.pow(0.0003, dt));
@@ -4155,7 +4201,7 @@ function updateRace(dt, time) {
     return;
   }
   updateAudio(race.speed, vehicle.maxSpeed, true, race.boostActive);
-  updateHud();
+  if (refreshHud) updateHud();
 }
 
 function showToast(message, danger, badge) {
@@ -4367,6 +4413,8 @@ function renderScene(time) {
   hemisphere.intensity = (scenery === "city" ? 2.15 : 2.25 + daylightPulse * 2.5) * (race.weather === "fog" ? 0.78 : 1);
   roadFill.intensity = (scenery === "city" ? 1.55 : 0.95) + race.visualPulse * 0.65 + Math.sin(time * 0.7) * 0.04;
   vehicleRim.intensity = (scenery === "city" ? 1.45 : 1.05) + race.visualPulse * 0.8;
+  renderFrameCount += 1;
+  if (renderFrameCount % 3 === 0) renderer.shadowMap.needsUpdate = true;
   if (race.orbitCamera) {
     const orbitDt = Math.min(0.05, Math.max(0, time - race.orbitLastTime));
     race.orbitLastTime = time;
@@ -4410,8 +4458,10 @@ function renderScene(time) {
 function gameFrame(timeMs) {
   const race = state.race;
   if (!race || state.screen !== "game") return;
-  const dt = Math.min(0.034, Math.max(0, (timeMs - race.lastTime) / 1000));
+  const frameTime = Math.max(0, (timeMs - race.lastTime) / 1000);
+  const dt = Math.min(0.034, frameTime);
   race.lastTime = timeMs;
+  updatePerformanceGovernor(frameTime);
   if (race.active && !race.paused && !race.finished) updateRace(dt, timeMs / 1000);
   else readControls();
   renderScene(timeMs / 1000);
